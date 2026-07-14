@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables (敏感信息)
+.env
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Vercel 临时文件
+.vercel-tmp/
+
+# 上传的剧本文件
+narrative-harness/uploads/
+
+# 截图和临时图片
+*.png
+!docs/*.png
+
+# 临时测试文件
+narrative-harness/_*.py
+narrative-harness/_*.json
+narrative-harness/_*.txt
+narrative-harness/tests/_*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

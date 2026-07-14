@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Narrative Harness — 通用文本生成引擎</title>
+<style>
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--accent:#3b82f6;--accent2:#8b5cf6;--text:#e2e8f0;--muted:#94a3b8;--danger:#ef4444;--success:#22c55e;--warn:#f59e0b}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+.header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:18px;font-weight:600;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .meta{font-size:13px;color:var(--muted)}
+.container{max-width:900px;margin:0 auto;padding:24px}
+
+/* Upload Section */
+.upload-section{margin-bottom:32px}
+.upload-section h2{font-size:22px;margin-bottom:16px}
+.upload-zone{border:2px dashed var(--border);border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:20px}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.upload-zone .icon{font-size:40px;margin-bottom:12px;opacity:.5}
+.upload-zone p{color:var(--muted);font-size:14px}
+.upload-zone .hint{font-size:12px;color:var(--muted);margin-top:8px;opacity:.6}
+.file-input{display:none}
+
+/* Sample Cards */
+.samples{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
+.sample-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .2s}
+.sample-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.sample-card.selected{border-color:var(--success);background:rgba(34,197,94,.08)}
+.sample-card .title{font-size:15px;font-weight:600;margin-bottom:4px}
+.sample-card .info{font-size:12px;color:var(--muted)}
+.sample-card .tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.sample-card .tag{font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(139,92,246,.15);color:var(--accent2)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-sm{padding:8px 16px;font-size:13px}
+
+/* Script Preview */
+.preview{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.preview h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.preview .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.preview .item{font-size:13px}
+.preview .item .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.preview .item .val{margin-top:2px}
+.char-chips{display:flex;flex-wrap:wrap;gap:6px}
+.char-chip{font-size:12px;padding:4px 10px;border-radius:20px;background:rgba(59,130,246,.12);color:var(--accent)}
+
+/* Progress */
+.progress-section{margin-bottom:20px}
+.progress-bar-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:16px}
+.progress-track{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:width .5s ease}
+.progress-label{font-size:13px;color:var(--muted);white-space:nowrap}
+
+/* Scene */
+.scene-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:20px}
+.scene-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.scene-badge{background:var(--accent);color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px}
+.scene-title{font-size:20px;font-weight:600}
+.scene-location{font-size:13px;color:var(--muted);margin-left:auto}
+.narration{font-size:15px;line-height:1.8;color:#cbd5e1;margin-bottom:24px;padding:16px;background:rgba(59,130,246,.05);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;white-space:pre-wrap}
+.dialogue-list{margin-bottom:24px}
+.dialogue-item{display:flex;gap:12px;margin-bottom:12px;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.dialogue-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.dialogue-bubble{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;padding:10px 16px;flex:1}
+.dialogue-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.dialogue-text{font-size:14px;line-height:1.6}
+.dialogue-emotion{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic}
+
+/* Choices */
+.choices-section{margin-top:8px}
+.choices-label{font-size:14px;font-weight:600;color:var(--warn);margin-bottom:12px}
+.choice-btn{display:block;width:100%;text-align:left;padding:14px 18px;margin-bottom:8px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:10px;color:var(--text);font-size:14px;cursor:pointer;transition:all .2s}
+.choice-btn:hover{background:rgba(139,92,246,.15);border-color:var(--accent2);transform:translateX(4px)}
+.choice-btn .effect{font-size:12px;color:var(--muted);margin-top:4px}
+.choice-btn.selected{background:rgba(34,197,94,.15);border-color:var(--success)}
+.waiting-msg{text-align:center;padding:20px;color:var(--success);font-size:14px;background:rgba(34,197,94,.08);border:1px dashed var(--success);border-radius:10px;margin-top:16px}
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;gap:12px;color:var(--muted)}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* History */
+.history-toggle{background:none;border:1px solid var(--border);color:var(--muted);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;margin-top:16px}
+.history-panel{margin-top:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;max-height:400px;overflow-y:auto;display:none}
+.history-panel.show{display:block}
+.history-entry{padding:12px 0;border-bottom:1px solid var(--border)}
+.history-entry:last-child{border-bottom:none}
+.history-scene{font-size:13px;font-weight:600;color:var(--accent)}
+.history-choice{font-size:12px;color:var(--success);margin-top:4px}
+
+.end-screen{text-align:center;padding:60px 24px}
+.end-screen h2{font-size:28px;margin-bottom:12px}
+.end-screen p{color:var(--muted);margin-bottom:24px}
+.section-label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Narrative Harness</h1>
+  <div class="meta" id="headerMeta">通用文本生成引擎 v3.0</div>
+</div>
+
+<div class="container" id="app"></div>
+
+<script>
+const API = '';
+let sessionId = null;
+let sceneData = null;
+let chosenIndex = -1;
+let currentScript = null;  // {script_id, summary}
+const app = document.getElementById('app');
+
+// ─── Screens ─────────────────────────────────────
+
+async function showHomeScreen() {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div>加载内置剧本...</div>';
+  let samples = [];
+  try {
+    const res = await api('/api/samples');
+    samples = res.samples || [];
+  } catch(e) {
+    // Server might not be running
+    app.innerHTML = `
+      <div class="start-screen" style="text-align:center;padding:80px 24px">
+        <h2 style="font-size:24px;margin-bottom:12px">服务器未启动</h2>
+        <p style="color:var(--muted);margin-bottom:24px">请先双击 start_server.bat 启动服务，然后再刷新此页面。</p>
+        <p style="color:var(--muted);font-size:13px">服务地址: http://127.0.0.1:8765</p>
+      </div>`;
+    return;
+  }
+
+  const sampleCards = samples.map((s, idx) => `
+    <div class="sample-card" data-idx="${idx}" data-path="${s.path}">
+      <div class="title">${s.title || s.filename}</div>
+      <div class="info">${s.worldline || ''} · ${s.total_scenes || 0} 个场景</div>
+      <div class="tags">${(s.characters||[]).map(c=>`<span class="tag">${c}</span>`).join('')}</div>
+    </div>
+  `).join('');
+
+  app.innerHTML = `
+    <div class="upload-section">
+      <h2>加载剧本</h2>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:20px">
+        输入本地文件夹路径、上传文件/文件夹，或选择内置示例。
+      </p>
+
+      <!-- 文件夹路径输入 -->
+      <div class="preview" style="margin-bottom:16px">
+        <h3>📁 从本地路径加载</h3>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <input type="text" id="folderPathInput" placeholder="输入剧本文件夹路径，如 C:\\Users\\...\\回魂公寓"
+            style="flex:1;padding:10px 14px;background:#1a1a24;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none">
+          <button class="btn btn-primary btn-sm" id="loadPathBtn" style="white-space:nowrap">加载</button>
+        </div>
+      </div>
+
+      <!-- 上传区域 -->
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <div class="upload-zone" id="dropZone" style="flex:1;padding:24px">
+          <div class="icon">📄</div>
+          <p>拖拽文件到这里，或点击上传</p>
+          <p class="hint">支持 .yaml / .yml / .json</p>
+        </div>
+        <div class="upload-zone" id="dropFolderZone" style="flex:1;padding:24px">
+          <div class="icon">📂</div>
+          <p>点击选择文件夹上传</p>
+          <p class="hint">保留子目录结构</p>
+        </div>
+      </div>
+      <input type="file" id="fileInput" class="file-input" accept=".yaml,.yml,.json">
+      <input type="file" id="folderInput" class="file-input" webkitdirectory multiple>
+    </div>
+
+    <div class="section-label">内置示例剧本</div>
+    <div class="samples" id="samplesList">${sampleCards || '<p style="color:var(--muted)">暂无内置剧本</p>'}</div>
+
+    <div id="previewArea"></div>
+    <div id="startArea" style="text-align:center;margin-top:24px;display:none">
+      <button class="btn btn-primary" id="startBtn">开始生成</button>
+    </div>
+  `;
+
+  // Folder path input
+  document.getElementById('loadPathBtn').addEventListener('click', () => loadFromPath());
+  document.getElementById('folderPathInput').addEventListener('keydown', e => { if(e.key==='Enter') loadFromPath(); });
+
+  // Event listeners
+  const dz = document.getElementById('dropZone');
+  const fi = document.getElementById('fileInput');
+  const dfz = document.getElementById('dropFolderZone');
+  const folderIn = document.getElementById('folderInput');
+  dz.addEventListener('click', () => fi.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); if(e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
+  fi.addEventListener('change', e => { if(e.target.files[0]) uploadFile(e.target.files[0]); });
+  dfz.addEventListener('click', () => folderIn.click());
+  folderIn.addEventListener('change', e => { if(e.target.files.length > 0) uploadFolder(e.target.files); });
+
+  // Sample card clicks — use event delegation
+  document.getElementById('samplesList').addEventListener('click', e => {
+    const card = e.target.closest('.sample-card');
+    if (!card) return;
+    document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    fetchSample(card.dataset.path);
+  });
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+}
+
+async function fetchSample(path) {
+  const pa = document.getElementById('previewArea');
+  if (pa) pa.innerHTML = '<div class="loading"><div class="spinner"></div>加载剧本...</div>';
+
+  try {
+    const res = await fetch('/api/upload-sample-path?path=' + encodeURIComponent(path), {method:'POST'});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    currentScript = data;
+    showPreview(data);
+  } catch(e) {
+    alert('加载失败: ' + e.message);
+    if (pa) pa.innerHTML = '';
+  }
+}
+
+async function uploadFile(file) {
+  const pa = document.getElementById('previewArea');
+  if (pa) pa.innerHTML = '<div class="loading"><div class="spinner"></div>解析剧本中...</div>';
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    currentScript = data;
+    showPreview(data);
+  } catch(e) {
+    alert('上传失败: ' + e.message);
+    if (pa) pa.innerHTML = '';
+  }
+}
+
+async function loadFromPath() {
+  const input = document.getElementById('folderPathInput');
+  const path = input.value.trim();
+  if (!path) return alert('请输入文件夹路径');
+
+  const pa = document.getElementById('previewArea');
+  if (pa) pa.innerHTML = '<div class="loading"><div class="spinner"></div>加载剧本文件夹...</div>';
+
+  try {
+    const res = await fetch('/api/load-folder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    currentScript = data;
+    showPreview(data);
+  } catch(e) {
+    alert('加载失败: ' + e.message);
+    if (pa) pa.innerHTML = '';
+  }
+}
+
+async function uploadFolder(files) {
+  const pa = document.getElementById('previewArea');
+  if (pa) pa.innerHTML = '<div class="loading"><div class="spinner"></div>上传文件夹中（' + files.length + ' 个文件）...</div>';
+
+  try {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const res = await fetch('/api/upload-directory', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    currentScript = data;
+    showPreview(data);
+  } catch(e) {
+    alert('上传失败: ' + e.message);
+    if (pa) pa.innerHTML = '';
+  }
+}
+
+function showPreview(data) {
+  const pa = document.getElementById('previewArea');
+  const sa = document.getElementById('startArea');
+  if (!pa || !sa) return;
+
+  pa.innerHTML = `
+    <div class="preview">
+      <h3>📖 ${data.title || '剧本'}</h3>
+      <div class="grid">
+        <div class="item">
+          <div class="label">角色</div>
+          <div class="val"><div class="char-chips">${(data.characters||[]).map(c=>`<span class="char-chip">${c}</span>`).join('')}</div></div>
+        </div>
+        <div class="item">
+          <div class="label">世界线</div>
+          <div class="val">${data.worldline || ''}</div>
+        </div>
+        <div class="item">
+          <div class="label">场景数</div>
+          <div class="val">${data.total_scenes || 0}</div>
+        </div>
+        <div class="item">
+          <div class="label">世界书</div>
+          <div class="val">${data.has_worldbook ? '✓ 有' : '✗ 无'}</div>
+        </div>
+      </div>
+    </div>
+  `;
+  sa.style.display = 'block';
+  document.getElementById('headerMeta').textContent = data.title || '';
+  // 显示一键运行按钮
+  if (data.path) {
+    sa.innerHTML = `
+      <button class="btn btn-primary" id="startBtn" style="margin-right:12px">开始生成</button>
+      <button class="btn" style="background:rgba(34,197,94,.15);color:var(--success);border:1px solid var(--success)" id="autoRunBtn">⚡ 一键跑全部场景</button>
+    `;
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('autoRunBtn').addEventListener('click', autoRunAll);
+  } else {
+    document.getElementById('startBtn').addEventListener('click', startGame);
+  }
+}
+
+// ─── Game Screen ─────────────────────────────────
+
+async function autoRunAll() {
+  if (!currentScript || !currentScript.path) { alert('请先加载本地文件夹'); return; }
+  app.innerHTML = `<div class="loading" style="flex-direction:column;gap:16px">
+    <div class="spinner" style="width:32px;height:32px"></div>
+    <div style="color:var(--muted);font-size:15px">⚡ 一键运行中，正在逐场景生成对话...</div>
+    <div style="color:var(--muted);font-size:12px">这可能需要几十秒到几分钟，请耐心等待</div>
+  </div>`;
+
+  try {
+    const res = await fetch('/api/auto-run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: currentScript.path}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    renderAutoRunResults(data);
+  } catch(e) {
+    app.innerHTML = `<div class="end-screen"><h2>一键运行失败</h2><p>${e.message}</p><button class="btn btn-primary" id="errBackBtn3">返回首页</button></div>`;
+    document.getElementById('errBackBtn3').addEventListener('click', showHomeScreen);
+  }
+}
+
+function renderAutoRunResults(data) {
+  const results = data.results || [];
+  let html = `
+    <div class="progress-section">
+      <div class="progress-bar-wrap">
+        <span class="progress-label">${data.title || '剧本'} — 已生成 ${data.generated_scenes}/${data.total_scenes} 个场景</span>
+        <div class="progress-track"><div class="progress-fill" style="width:${(data.generated_scenes/data.total_scenes)*100}%"></div></div>
+        <span class="progress-label">${Math.round((data.generated_scenes/data.total_scenes)*100)}%</span>
+      </div>
+    </div>
+  `;
+
+  results.forEach((r, idx) => {
+    const statusColor = r.success ? 'var(--success)' : 'var(--danger)';
+    const statusIcon = r.success ? '✓' : '✗';
+    html += `<div class="scene-card" style="margin-bottom:16px">
+      <div class="scene-header">
+        <span class="scene-badge" style="background:${statusColor}">${statusIcon}</span>
+        <span class="scene-title">${r.scene_name || '场景 ' + (r.scene_index + 1)}</span>
+        <span class="scene-location">${r.location || ''}</span>
+      </div>`;
+
+    if (r.success) {
+      if (r.narration) html += `<div class="narration">${r.narration}</div>`;
+      html += '<div class="dialogue-list">';
+      (r.dialogues || []).forEach(d => {
+        html += `<div class="dialogue-item">
+          <div class="dialogue-avatar" style="background:var(--accent)20;color:var(--accent)">${d.speaker.charAt(0)}</div>
+          <div class="dialogue-bubble">
+            <div class="dialogue-name" style="color:var(--accent)">${d.speaker}</div>
+            <div class="dialogue-text">${d.text}</div>
+          </div></div>`;
+      });
+      html += '</div>';
+
+      // 选项
+      const choices = r.nextChoices || [];
+      if (choices.length) {
+        html += '<div class="choices-section"><div class="choices-label">可选操作</div>';
+        choices.forEach(c => {
+          html += `<div style="padding:8px 14px;margin-bottom:4px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:8px;font-size:13px">
+            ${c.text} <span style="color:var(--muted);font-size:11px">(${c.effect || ''})</span></div>`;
+        });
+        html += '</div>';
+      }
+
+      // 验证摘要
+      const v = r.validation || {};
+      if (v.checks) {
+        const passed = v.checks.filter(c => c.passed).length;
+        const total = v.checks.length;
+        html += `<div style="margin-top:12px;font-size:12px;color:var(--muted)">验证: ${passed}/${total} 通过</div>`;
+      }
+    } else {
+      html += `<div style="color:var(--danger);padding:12px">${r.error || '生成失败'}</div>`;
+    }
+    html += '</div>';
+  });
+
+  html += `<div style="text-align:center;margin-top:24px">
+    <button class="btn btn-primary" id="backHomeBtn">返回首页</button>
+  </div>`;
+
+  app.innerHTML = html;
+  document.getElementById('backHomeBtn').addEventListener('click', showHomeScreen);
+}
+
+async function startGame() {
+  if (!currentScript) { alert('请先选择或上传剧本'); return; }
+
+  app.innerHTML = '<div class="loading"><div class="spinner"></div>启动会话...</div>';
+  try {
+    const res = await api(`/api/start?script_id=${currentScript.script_id}`, {method:'POST'});
+    sessionId = res.session_id;
+    await generateScene();
+  } catch(e) {
+    app.innerHTML = `<div class="end-screen"><h2>Error</h2><p>${e.message}</p><button class="btn btn-primary" id="errBackBtn">返回</button></div>`;
+    document.getElementById('errBackBtn').addEventListener('click', showHomeScreen);
+  }
+}
+
+async function generateScene() {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div>AI 正在生成场景内容...</div>';
+  chosenIndex = -1;
+  try {
+    const result = await api(`/api/session/${sessionId}/generate`, {method:'POST'});
+    sceneData = result;
+    const state = await api(`/api/session/${sessionId}/state`);
+    if (state.state === 'finished') {
+      renderEnd(state);
+    } else {
+      renderScene(result, state);
+    }
+  } catch(e) {
+    app.innerHTML = `<div class="end-screen"><h2>生成失败</h2><p>${e.message}</p><button class="btn btn-primary" id="errBackBtn2">返回首页</button></div>`;
+    document.getElementById('errBackBtn2').addEventListener('click', showHomeScreen);
+  }
+}
+
+function renderScene(data, state) {
+  const meta = data.scene_meta || {};
+  const dialogues = data.data?.dialogues || [];
+  const narration = data.data?.narration || '';
+  const aiChoices = data.data?.nextChoices || [];
+  const scriptChoices = data.available_choices || [];
+  const choices = scriptChoices.length > 0 ? scriptChoices : aiChoices;
+  const progress = data.progress || 0;
+
+  const charColors = {};
+  const colors = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#22c55e','#ef4444'];
+  dialogues.forEach(d => {
+    if(!charColors[d.speaker]) charColors[d.speaker] = colors[Object.keys(charColors).length % colors.length];
+  });
+
+  let dlgHtml = dialogues.map((d,i) => {
+    const c = charColors[d.speaker]||'#3b82f6';
+    return `<div class="dialogue-item" style="animation-delay:${i*0.1}s">
+      <div class="dialogue-avatar" style="background:${c}20;color:${c}">${d.speaker.charAt(0)}</div>
+      <div class="dialogue-bubble">
+        <div class="dialogue-name" style="color:${c}">${d.speaker}</div>
+        <div class="dialogue-text">${d.text}</div>
+        ${d.emotion?`<div class="dialogue-emotion">${d.emotion}</div>`:''}
+      </div></div>`;
+  }).join('');
+
+  let choiceHtml = '';
+  if (data.session_state === 'generated' && chosenIndex < 0) {
+    choiceHtml = `<div class="choices-section">
+      <div class="choices-label">做出你的选择才能继续</div>
+      <div id="choicesList">
+      ${choices.map((c,i)=>`<button class="choice-btn" data-idx="${i}">
+        <div>${c.text}</div><div class="effect">${c.effect||c.description||''}</div></button>`).join('')}
+      </div>
+    </div>`;
+  } else if (chosenIndex >= 0) {
+    choiceHtml = `<div class="waiting-msg">选择已确认，点击下方按钮继续下一段</div>
+      <div style="text-align:center;margin-top:16px"><button class="btn btn-primary" id="nextSceneBtn">继续下一段 →</button></div>`;
+  }
+
+  app.innerHTML = `
+    <div class="progress-section">
+      <div class="progress-bar-wrap">
+        <span class="progress-label">场景 ${meta.scene_index||'?'}/${meta.total_scenes||'?'}</span>
+        <div class="progress-track"><div class="progress-fill" style="width:${progress*100}%"></div></div>
+        <span class="progress-label">${Math.round(progress*100)}%</span>
+      </div>
+    </div>
+    <div class="scene-card">
+      <div class="scene-header">
+        <span class="scene-badge">${meta.scene_name||''}</span>
+        <span class="scene-title">${meta.scene_name||''}</span>
+        <span class="scene-location">${meta.location||''}</span>
+      </div>
+      <div class="narration">${narration}</div>
+      <div class="dialogue-list">${dlgHtml}</div>
+      ${choiceHtml}
+    </div>
+    <button class="history-toggle" id="histBtn">查看历史</button>
+    <div class="history-panel" id="historyPanel"></div>
+    <div style="text-align:center;margin-top:12px">
+      <button class="btn btn-sm" style="background:var(--card);color:var(--muted);border:1px solid var(--border)" id="homeBtn">返回首页</button>
+    </div>`;
+
+  // Attach event listeners after render
+  const choicesList = document.getElementById('choicesList');
+  if (choicesList) {
+    choicesList.addEventListener('click', e => {
+      const btn = e.target.closest('.choice-btn');
+      if (!btn) return;
+      const idx = parseInt(btn.dataset.idx);
+      const text = choices[idx]?.text || '';
+      makeChoice(idx, text);
+    });
+  }
+  const nextBtn = document.getElementById('nextSceneBtn');
+  if (nextBtn) nextBtn.addEventListener('click', generateScene);
+  document.getElementById('histBtn').addEventListener('click', toggleHistory);
+  document.getElementById('homeBtn').addEventListener('click', showHomeScreen);
+}
+
+async function makeChoice(index, text) {
+  if (chosenIndex >= 0) return;
+  chosenIndex = index;
+  document.querySelectorAll('.choice-btn').forEach((btn,i) => {
+    if(i===index) btn.classList.add('selected');
+    btn.style.pointerEvents = 'none';
+  });
+  try {
+    const res = await api(`/api/session/${sessionId}/choose`, {
+      method:'POST', body: JSON.stringify({choice_text:text, choice_index:index})
+    });
+    if (res.session_state === 'finished') {
+      setTimeout(() => renderEnd(res), 500);
+    } else {
+      const state = await api(`/api/session/${sessionId}/state`);
+      renderScene(sceneData, state);
+    }
+  } catch(e) { alert('Error: '+e.message); chosenIndex = -1; }
+}
+
+function renderEnd(state) {
+  app.innerHTML = `<div class="end-screen">
+    <h2>故事结束</h2>
+    <p>你已走完这条世界线的全部场景。</p>
+    <button class="btn btn-primary" id="endHomeBtn">返回首页</button>
+  </div>`;
+  document.getElementById('endHomeBtn').addEventListener('click', showHomeScreen);
+}
+
+async function loadHistory() {
+  const p = document.getElementById('historyPanel');
+  if(!p) return;
+  try {
+    const d = await api(`/api/session/${sessionId}/history`);
+    p.innerHTML = (d.history||[]).map((h,i)=>`<div class="history-entry">
+      <div class="history-scene">场景 ${i+1}: ${h.scene_name||''}</div>
+      <div class="history-choice">选择: ${h.player_choice}</div></div>`).join('') || '<p style="color:var(--muted)">暂无历史</p>';
+  } catch(e) { p.innerHTML = e.message; }
+}
+
+function toggleHistory() {
+  const p = document.getElementById('historyPanel');
+  if(p){p.classList.toggle('show'); if(p.classList.contains('show')) loadHistory();}
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(API+path, {headers:{'Content-Type':'application/json'},...opts});
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${res.status}`);}
+  return res.json();
+}
+
+showHomeScreen();
+</script>
+</body>
+</html>
