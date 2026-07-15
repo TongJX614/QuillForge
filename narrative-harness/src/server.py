@@ -32,7 +32,7 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -59,6 +59,90 @@ def _extract_worldbook_rules(worldbook: str) -> str:
         if match:
             rules.append(f"【{section}】{match.group(1).strip()}")
     return "\n\n".join(rules) if rules else worldbook[:500]
+
+
+def _get_current_stage(stages: list, scene_id: str) -> dict | None:
+    """找到当前场景所属的剧情阶段"""
+    for stage in stages:
+        if not isinstance(stage, dict):
+            continue
+        scenes = stage.get("scenes", [])
+        if isinstance(scenes, list) and scene_id in scenes:
+            return stage
+        if isinstance(scenes, str) and scenes == scene_id:
+            return stage
+    return None
+
+
+def _format_current_stage_context(stage: dict | None) -> str:
+    """格式化当前阶段的剧情要求（关键事件+情感弧线）"""
+    if not stage:
+        return ""
+    parts = []
+    name = stage.get("name", "")
+    desc = str(stage.get("description", "")).strip()
+    if name:
+        parts.append(f"当前阶段：{name}")
+    if desc:
+        parts.append(f"阶段目标：{desc}")
+    key_events = stage.get("key_events", []) or []
+    if key_events:
+        events = []
+        for e in key_events:
+            if isinstance(e, dict):
+                events.append(str(e.get("name", e.get("description", "")))[:40])
+            else:
+                events.append(str(e)[:40])
+        parts.append("本场景必须体现的关键事件：")
+        for i, ev in enumerate(events, 1):
+            parts.append(f"  {i}. {ev}")
+    emotional_arc = str(stage.get("emotional_arc", "")).strip()
+    if emotional_arc:
+        parts.append(f"情感弧线走向：{emotional_arc}")
+    return "\n".join(parts)
+
+
+def _format_beats_for_scene(beats: list, scene_id: str) -> str:
+    """格式化当前场景的剧情节拍"""
+    if not beats:
+        return ""
+    relevant = [b for b in beats if isinstance(b, dict) and b.get("scene") == scene_id]
+    if not relevant:
+        return ""
+    parts = []
+    for b in relevant:
+        name = b.get("name", "")
+        desc = str(b.get("description", "")).strip()[:80]
+        purpose = str(b.get("purpose", "")).strip()[:60]
+        line = f"● {name}"
+        if desc:
+            line += f"：{desc}"
+        if purpose:
+            line += f"（叙事目的：{purpose}）"
+        parts.append(line)
+    return "\n".join(parts)
+
+
+def _format_hooks_for_scene(hooks: list, scene_id: str) -> str:
+    """格式化当前场景的剧情钩子"""
+    if not hooks:
+        return ""
+    relevant = [h for h in hooks if isinstance(h, dict) and h.get("scene") == scene_id]
+    if not relevant:
+        return ""
+    parts = []
+    for h in relevant:
+        htype = h.get("type", "")
+        desc = str(h.get("description", "")).strip()[:80]
+        parts.append(f"[{htype}] {desc}")
+    return "\n".join(parts)
+
+
+def _format_themes(themes: list) -> str:
+    """格式化故事主题"""
+    if not themes:
+        return ""
+    return "；".join(str(t)[:50] for t in themes[:5])
 
 
 def _format_relationships(rels: list) -> str:
@@ -116,15 +200,26 @@ def _format_events(events: list) -> str:
     for e in events[:8]:
         if isinstance(e, dict):
             name = e.get("name", e.get("title", ""))
+            # 触发条件: 兼容 trigger_conditions(list) / triggerCondition(str) / trigger_stage(str)
+            tc_raw = e.get("trigger_conditions", e.get("triggerCondition", e.get("trigger_condition", "")))
+            if isinstance(tc_raw, list):
+                trigger_cond = "；".join(
+                    str(c.get("value", c.get("type", c))).strip()[:30]
+                    for c in tc_raw[:3]
+                )
+            else:
+                trigger_cond = str(tc_raw).strip()[:60]
             trigger_stage = e.get("triggerStage", e.get("trigger_stage", ""))
-            trigger_cond = str(e.get("triggerCondition", e.get("trigger_condition", ""))).strip()[:60]
             content = str(e.get("content", e.get("description", ""))).strip()[:100]
             outcome = str(e.get("outcome", e.get("result", ""))).strip()[:60]
+            chars_involved = e.get("characters_involved", [])
             line = f"【{name}】"
             if trigger_stage:
                 line += f" 触发于「{trigger_stage}」"
             if trigger_cond:
                 line += f"\n  触发条件：{trigger_cond}"
+            if chars_involved:
+                line += f"\n  涉及角色：{', '.join(str(c) for c in chars_involved[:3])}"
             if content:
                 line += f"\n  内容：{content}"
             if outcome:
@@ -303,6 +398,45 @@ def _format_worldlines(world_lines: list, convergence_points: list = None, rules
     return "\n\n".join(parts)
 
 
+def _extract_script_choices(scene: dict, key_choices: list) -> list[dict]:
+    """从场景数据中提取剧本定义的选项（非 LLM 生成）
+    
+    优先级：interactions[].options[] → critical_choice 匹配 key_choices
+    """
+    raw = []
+    # 1. interactions[].options[]
+    for interaction in (scene.get("interactions", []) or []):
+        if isinstance(interaction, dict):
+            opts = interaction.get("options", [])
+            if opts and isinstance(opts, list):
+                raw = raw + opts
+    # 2. critical_choice → key_choices
+    if not raw:
+        cid = scene.get("critical_choice", "")
+        if cid:
+            for kc in (key_choices if isinstance(key_choices, list) else []):
+                if isinstance(kc, dict) and kc.get("id") == cid:
+                    raw = kc.get("options", [])
+                    break
+    # 3. 顶层 choices
+    if not raw:
+        raw = scene.get("choices", [])
+    
+    result = []
+    for c in (raw if isinstance(raw, list) else []):
+        if isinstance(c, dict):
+            consequences = c.get("consequences", {})
+            if isinstance(consequences, dict):
+                effect = consequences.get("immediate", consequences.get("delayed", ""))
+            else:
+                effect = str(consequences) if consequences else ""
+            result.append({
+                "text": c.get("text", ""),
+                "effect": effect or c.get("description", ""),
+            })
+    return result
+
+
 def _format_scene_details(scene: dict, key_choices: list = None) -> str:
     """格式化当前场景的详细信息（叙事笔记、互动、关键选择）"""
     if not scene:
@@ -455,6 +589,7 @@ class GameSession:
 
         self.history.append({
             "scene_index": self.current_scene_index,
+            "scene_id": scene.get("id", scene.get("scene_id", "")),
             "scene_name": scene.get("name", ""),
             "narration": self.current_result.get("data", {}).get("narration", ""),
             "dialogues": self.current_result.get("data", {}).get("dialogues", []),
@@ -463,19 +598,134 @@ class GameSession:
 
         self.previous_result = self.current_result
         self.current_scene_index += 1
-        self.current_result = None
 
         if self.current_scene_index >= self.total_scenes:
             self.state = SessionState.FINISHED
+            # 保存结局场景的生成结果和结局数据
+            last_result = self.current_result
+            endings_data = self.adapter.raw_data.get("endings", [])
+            matched_ending = self._match_ending(endings_data, self.history)
+            self.current_result = None
+            return {
+                "chosen": chosen,
+                "session_state": self.state.value,
+                "progress": round(self.progress, 2),
+                "message": "故事已结束",
+                "ending": {
+                    "narration": last_result.get("data", {}).get("narration", "") if last_result else "",
+                    "dialogues": last_result.get("data", {}).get("dialogues", []) if last_result else [],
+                    "matched_ending": matched_ending,
+                },
+            }
         else:
             self.state = SessionState.CHOSEN
+            self.current_result = None
 
         return {
             "chosen": chosen,
             "session_state": self.state.value,
             "progress": round(self.progress, 2),
-            "message": "选择已确认" if self.state != SessionState.FINISHED else "故事已结束",
+            "message": "选择已确认",
         }
+
+    def _match_ending(self, endings: list, history: list) -> dict | None:
+        """根据玩家历史选择匹配最合适的结局"""
+        import re as _re
+        if not endings:
+            return None
+
+        # 英文关键词 → 中文同义词映射
+        keyword_synonyms = {
+            "stop": ["停止", "放弃", "拒绝", "不", "算了", "退出", "删除", "不去"],
+            "continue": ["继续", "深入", "坚持", "前进", "探索", "接受"],
+            "negotiate": ["谈判", "协议", "妥协", "交易", "达成", "协商", "合作"],
+            "reveal": ["公开", "揭露", "真相", "曝光", "公布", "揭发", "展示"],
+            "investigate": ["调查", "追查", "查明", "探究", "追踪", "查"],
+            "hidden": ["隐藏", "秘密", "暗中", "悄悄", "潜伏", "偷偷"],
+            "accept": ["接受", "同意", "答应", "确认"],
+            "reject": ["拒绝", "否决", "不接受", "回绝"],
+            "trust": ["信任", "相信", "信赖"],
+            "distrust": ["不信任", "怀疑", "质疑"],
+        }
+
+        # 构建玩家选择历史: {scene_id: choice_text}
+        player_choices = {}
+        for h in history:
+            sid = h.get("scene_id", "")
+            choice = h.get("player_choice", "").lower()
+            if sid and choice:
+                player_choices[sid] = choice
+
+        def parse_condition(cond_value: str):
+            """解析条件值，返回 (scene_id, keyword) 或 None"""
+            cond_value = cond_value.strip()
+            # 格式: "在scene_XX选择YYY" 或 "在scene_XX选择YYY且..."
+            m = _re.search(r'(?:在)?(scene_\d+).{0,4}(?:选择|选|select|choose)\s*(\w+)', cond_value, _re.IGNORECASE)
+            if m:
+                return m.group(1), m.group(2).lower()
+            return None, None
+
+        def choice_matches_keyword(choice_text: str, keyword: str) -> bool:
+            """检查玩家选择文本是否匹配关键词"""
+            keyword = keyword.lower()
+            # 直接包含
+            if keyword in choice_text:
+                return True
+            # 同义词匹配
+            synonyms = keyword_synonyms.get(keyword, [])
+            for syn in synonyms:
+                if syn in choice_text:
+                    return True
+            return False
+
+        best_match = None
+        best_score = -1
+
+        for ending in endings:
+            if not isinstance(ending, dict):
+                continue
+            score = 0
+            total_conditions = 0
+
+            # 匹配 trigger_conditions
+            for cond in ending.get("trigger_conditions", []):
+                if not isinstance(cond, dict):
+                    continue
+                total_conditions += 1
+                cond_val = str(cond.get("value", ""))
+                scene_id, keyword = parse_condition(cond_val)
+                if scene_id and keyword and scene_id in player_choices:
+                    if choice_matches_keyword(player_choices[scene_id], keyword):
+                        score += 2  # trigger_conditions 权重更高
+
+            # 匹配 unlock_conditions
+            for uc in ending.get("unlock_conditions", []):
+                if not isinstance(uc, str):
+                    continue
+                total_conditions += 1
+                scene_id, keyword = parse_condition(uc)
+                if scene_id and keyword and scene_id in player_choices:
+                    if choice_matches_keyword(player_choices[scene_id], keyword):
+                        score += 1
+
+            # 归一化分数（避免条件少的结局因为容易全匹配而胜出）
+            normalized = score / max(total_conditions, 1)
+            if normalized > best_score or (normalized == best_score and score > best_match.get("_raw_score", 0) if best_match else True):
+                best_score = normalized
+                best_match = {**ending, "_raw_score": score, "_normalized_score": normalized}
+
+        if best_match:
+            # 清除内部字段
+            best_match.pop("_raw_score", None)
+            best_match.pop("_normalized_score", None)
+            return {
+                "title": best_match.get("title", ""),
+                "type": best_match.get("type", ""),
+                "narrative": best_match.get("narrative", ""),
+                "epilogue": best_match.get("epilogue", ""),
+                "replay_value": best_match.get("replay_value", ""),
+            }
+        return None
 
     def get_state(self) -> dict:
         scene = self.adapter.scenes[self.current_scene_index] if self.current_scene_index < len(self.adapter.scenes) else {}
@@ -637,6 +887,63 @@ class AutoRunRequest(BaseModel):
     start_scene: Optional[int] = 0          # 从第几个场景开始（0-based）
 
 
+def _build_scene_harness_input(story: dict, scene: dict, idx: int, previous_data: dict | None = None) -> dict:
+    """构建单个场景的 harness_input（供 auto_run 和 auto_run_stream 共用）"""
+    scene_id = scene.get("id", scene.get("scene_id", ""))
+    characters = get_scene_characters(story, scene)
+    worldline = build_worldline(story, idx)
+    scene_text = build_scene_text(scene)
+    current_stage = _get_current_stage(story.get("stages", []), scene_id)
+
+    harness_input = {
+        "currentScene": scene_text,
+        "characters": [
+            {
+                "name": c["name"],
+                "role": c["role"],
+                "personality": c["personality"],
+                "speakingStyle": c.get("speakingStyle", ""),
+                "background": c.get("background", ""),
+                "motivation": c.get("motivation", ""),
+                "secrets": c.get("secrets", ""),
+                "relationships": c.get("relationships", ""),
+                "appearance": c.get("appearance", ""),
+                "arc": c.get("arc", ""),
+            }
+            for c in characters
+        ],
+        "worldline": worldline,
+        "playerChoice": "",
+        "_worldbook": _extract_worldbook_rules(story.get("worldbook", "")),
+        "_narrativeStyle": story.get("narrative_style", "") or "第二人称叙事",
+        "_plotSummary": story.get("plot_summary", ""),
+        "_coreConflict": story.get("core_conflict", ""),
+        "_themes": _format_themes(story.get("themes", [])),
+        "_relationshipNetwork": _format_relationships(story.get("character_relationships", [])),
+        "_stagesOverview": _format_stages_overview(story.get("stages", [])),
+        "_events": _format_events(story.get("events", [])),
+        "_keyChoices": _format_key_choices(story.get("key_choices", [])),
+        "_endings": _format_endings(story.get("endings", [])),
+        "_sceneDetails": _format_scene_details(scene, story.get("key_choices", [])),
+        "_worldlines": _format_worldlines(
+            story.get("world_lines", []),
+            story.get("convergence_points", []),
+            story.get("worldline_rules", []),
+        ),
+        "_currentStageContext": _format_current_stage_context(current_stage),
+        "_sceneBeats": _format_beats_for_scene(story.get("beats", []), scene_id),
+        "_sceneHooks": _format_hooks_for_scene(story.get("hooks", []), scene_id),
+    }
+    # 当本场景有剧本选项时，标记跳过 Stage 4 的 LLM 生成
+    _scene_script_choices = _extract_script_choices(scene, story.get("key_choices", []))
+    if _scene_script_choices:
+        harness_input["_hasScriptChoices"] = True
+        harness_input["_scriptChoices"] = _scene_script_choices
+    if previous_data:
+        harness_input["previousContext"] = previous_data
+    return harness_input
+
+
 @app.post("/api/auto-run", summary="一键运行：加载剧本文件夹并自动生成全部场景")
 async def auto_run(req: AutoRunRequest) -> dict:
     """
@@ -667,52 +974,13 @@ async def auto_run(req: AutoRunRequest) -> dict:
 
     for idx in range(start, end):
         scene = scenes[idx]
-        characters = get_scene_characters(story, scene)
-        worldline = build_worldline(story, idx)
-        scene_text = build_scene_text(scene)
-
-        harness_input = {
-            "currentScene": scene_text,
-            "characters": [
-                {
-                    "name": c["name"],
-                    "role": c["role"],
-                    "personality": c["personality"],
-                    "speakingStyle": c.get("speakingStyle", ""),
-                    "background": c.get("background", ""),
-                    "motivation": c.get("motivation", ""),
-                    "secrets": c.get("secrets", ""),
-                    "relationships": c.get("relationships", ""),
-                    "appearance": c.get("appearance", ""),
-                    "arc": c.get("arc", ""),
-                }
-                for c in characters
-            ],
-            "worldline": worldline,
-            "playerChoice": "",
-            # 注入全局剧本上下文
-            "_worldbook": _extract_worldbook_rules(story.get("worldbook", "")),
-            "_narrativeStyle": story.get("narrative_style", "") or "第二人称叙事",
-            "_plotSummary": story.get("plot_summary", ""),
-            "_coreConflict": story.get("core_conflict", ""),
-            "_relationshipNetwork": _format_relationships(story.get("character_relationships", [])),
-            "_stagesOverview": _format_stages_overview(story.get("stages", [])),
-            "_events": _format_events(story.get("events", [])),
-            "_keyChoices": _format_key_choices(story.get("key_choices", [])),
-            "_endings": _format_endings(story.get("endings", [])),
-            "_sceneDetails": _format_scene_details(scene, story.get("key_choices", [])),
-            "_worldlines": _format_worldlines(
-                story.get("world_lines", []),
-                story.get("convergence_points", []),
-                story.get("worldline_rules", []),
-            ),
-        }
-        if previous_data:
-            harness_input["previousContext"] = previous_data
+        harness_input = _build_scene_harness_input(story, scene, idx, previous_data)
 
         try:
             result = h.run(harness_input)
             data = result.get("data", {})
+            # 优先使用剧本定义的选项，而不是 LLM 生成的
+            script_choices = _extract_script_choices(scene, story.get("key_choices", []))
             results.append({
                 "scene_index": idx,
                 "scene_name": scene.get("name", f"场景 {idx + 1}"),
@@ -720,7 +988,7 @@ async def auto_run(req: AutoRunRequest) -> dict:
                 "success": result.get("success", False),
                 "narration": data.get("narration", ""),
                 "dialogues": data.get("dialogues", []),
-                "nextChoices": data.get("nextChoices", []),
+                "nextChoices": script_choices if script_choices else data.get("nextChoices", []),
                 "validation": result.get("validation", {}),
             })
             previous_data = data
@@ -733,13 +1001,154 @@ async def auto_run(req: AutoRunRequest) -> dict:
             })
             break
 
+    # 提取结局数据（最后一个场景的结果作为结局）
+    ending_result = None
+    if results and results[-1].get("success"):
+        last = results[-1]
+        endings_data = story.get("endings", [])
+        # auto-run没有玩家选择历史，展示所有结局
+        all_endings = []
+        if endings_data and isinstance(endings_data, list):
+            for e in endings_data:
+                if isinstance(e, dict):
+                    all_endings.append({
+                        "title": e.get("title", ""),
+                        "type": e.get("type", ""),
+                        "narrative": e.get("narrative", ""),
+                        "epilogue": e.get("epilogue", ""),
+                        "replay_value": e.get("replay_value", ""),
+                    })
+        ending_result = {
+            "narration": last.get("narration", ""),
+            "dialogues": last.get("dialogues", []),
+            "all_endings": all_endings,  # auto-run 展示全部结局
+        }
+
     return {
         "title": story.get("title", ""),
         "total_scenes": len(scenes),
         "generated_scenes": len(results),
         "scene_range": [start, end - 1],
         "results": results,
+        "ending": ending_result,
     }
+
+
+@app.post("/api/auto-run/stream", summary="流式一键运行：SSE 逐场景推送生成结果")
+async def auto_run_stream(req: AutoRunRequest):
+    """
+    SSE 流式版本的 auto-run。
+    每个场景生成完毕后立刻推送给前端，无需等待全部场景完成。
+
+    SSE 事件类型：
+    - event: start    → {"title": "...", "total_scenes": N}
+    - event: scene    → 单个场景的完整结果（与 auto_run 中的 results 元素相同）
+    - event: ending   → 结局数据（仅最后一个场景成功后推送）
+    - event: done     → {"generated_scenes": M, "total_time_ms": T}
+    - event: error    → {"message": "..."}
+    """
+    folder = Path(req.path)
+    if not folder.exists():
+        raise HTTPException(404, f"路径不存在：{req.path}")
+    if not folder.is_dir():
+        raise HTTPException(400, f"路径不是文件夹：{req.path}")
+
+    story = load_story(str(folder))
+    scenes = story.get("scenes", [])
+    if not scenes:
+        raise HTTPException(400, "剧本中没有找到场景数据")
+
+    start = req.start_scene or 0
+    end = min(req.max_scenes + start, len(scenes)) if req.max_scenes else len(scenes)
+    if start >= len(scenes):
+        raise HTTPException(400, f"start_scene({start}) 超出范围（共 {len(scenes)} 个场景）")
+
+    def event_stream():
+        import asyncio
+        h = get_harness()
+        previous_data = None
+        generated = 0
+        t0 = time.time()
+
+        # 推送 start 事件
+        start_payload = json.dumps({
+            "title": story.get("title", ""),
+            "total_scenes": len(scenes),
+            "scene_range": [start, end - 1],
+        }, ensure_ascii=False)
+        yield f"event: start\ndata: {start_payload}\n\n"
+
+        for idx in range(start, end):
+            scene = scenes[idx]
+            harness_input = _build_scene_harness_input(story, scene, idx, previous_data)
+
+            try:
+                result = h.run(harness_input)
+                data = result.get("data", {})
+                script_choices = _extract_script_choices(scene, story.get("key_choices", []))
+
+                scene_result = {
+                    "scene_index": idx,
+                    "scene_name": scene.get("name", f"场景 {idx + 1}"),
+                    "location": scene.get("location", ""),
+                    "success": result.get("success", False),
+                    "narration": data.get("narration", ""),
+                    "dialogues": data.get("dialogues", []),
+                    "nextChoices": script_choices if script_choices else data.get("nextChoices", []),
+                    "validation": result.get("validation", {}),
+                    "elapsed_ms": int((time.time() - t0) * 1000),
+                }
+                previous_data = data
+                generated += 1
+
+                scene_json = json.dumps(scene_result, ensure_ascii=False)
+                yield f"event: scene\ndata: {scene_json}\n\n"
+
+                # 最后一个场景成功后，推送结局数据
+                if idx == end - 1 and result.get("success"):
+                    endings_data = story.get("endings", [])
+                    all_endings = []
+                    if endings_data and isinstance(endings_data, list):
+                        for e in endings_data:
+                            if isinstance(e, dict):
+                                all_endings.append({
+                                    "title": e.get("title", ""),
+                                    "type": e.get("type", ""),
+                                    "narrative": e.get("narrative", ""),
+                                    "epilogue": e.get("epilogue", ""),
+                                    "replay_value": e.get("replay_value", ""),
+                                })
+                    ending_payload = json.dumps({
+                        "narration": data.get("narration", ""),
+                        "dialogues": data.get("dialogues", []),
+                        "all_endings": all_endings,
+                    }, ensure_ascii=False)
+                    yield f"event: ending\ndata: {ending_payload}\n\n"
+
+            except Exception as e:
+                err_payload = json.dumps({
+                    "scene_index": idx,
+                    "scene_name": scene.get("name", f"场景 {idx + 1}"),
+                    "message": str(e),
+                }, ensure_ascii=False)
+                yield f"event: error\ndata: {err_payload}\n\n"
+                break
+
+        # 推送 done 事件
+        done_payload = json.dumps({
+            "generated_scenes": generated,
+            "total_time_ms": int((time.time() - t0) * 1000),
+        }, ensure_ascii=False)
+        yield f"event: done\ndata: {done_payload}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # nginx 兼容
+        },
+    )
 
 
 @app.post("/api/upload-directory")
@@ -954,9 +1363,13 @@ async def api_play_scene(body: PlayRequest) -> dict:
         raise HTTPException(400, f"场景索引 {idx} 超出范围（共 {len(scenes)} 个场景）")
 
     scene = scenes[idx]
+    scene_id = scene.get("id", scene.get("scene_id", ""))
     characters = get_scene_characters(story, scene)
     worldline = build_worldline(story, idx)
     scene_text = build_scene_text(scene)
+
+    # 提取当前场景的剧情阶段上下文
+    current_stage = _get_current_stage(story.get("stages", []), scene_id)
 
     # 构建 HarnessInput 字典
     harness_input = {
@@ -983,6 +1396,7 @@ async def api_play_scene(body: PlayRequest) -> dict:
         "_narrativeStyle": story.get("narrative_style", "") or "第二人称叙事",
         "_plotSummary": story.get("plot_summary", ""),
         "_coreConflict": story.get("core_conflict", ""),
+        "_themes": _format_themes(story.get("themes", [])),
         "_relationshipNetwork": _format_relationships(story.get("character_relationships", [])),
         "_stagesOverview": _format_stages_overview(story.get("stages", [])),
         "_events": _format_events(story.get("events", [])),
@@ -994,7 +1408,16 @@ async def api_play_scene(body: PlayRequest) -> dict:
             story.get("convergence_points", []),
             story.get("worldline_rules", []),
         ),
+        # 当前场景专属剧情上下文
+        "_currentStageContext": _format_current_stage_context(current_stage),
+        "_sceneBeats": _format_beats_for_scene(story.get("beats", []), scene_id),
+        "_sceneHooks": _format_hooks_for_scene(story.get("hooks", []), scene_id),
     }
+    # 当本场景有剧本选项时，标记跳过 Stage 4 的 LLM 生成
+    _scene_script_choices = _extract_script_choices(scene, story.get("key_choices", []))
+    if _scene_script_choices:
+        harness_input["_hasScriptChoices"] = True
+        harness_input["_scriptChoices"] = _scene_script_choices
     if body.previousDialogues:
         harness_input["previousContext"] = {
             "dialogues": body.previousDialogues,

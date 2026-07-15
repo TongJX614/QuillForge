@@ -34,16 +34,16 @@ expected_output:
   dialogues:
     - speaker: "赵远山"
       text: "左转！现在！"
-      emotion: "urgent"
+      emotion: "急切"
     - speaker: "林晗"
       text: "左转的话我们会偏离航线至少 3 天。燃料余量够吗？"
-      emotion: "analytical"
+      emotion: "分析"
     - speaker: "赵远山"
       text: "先活下来再算账。"
-      emotion: "decisive"
+      emotion: "果断"
     - speaker: "林晗"
       text: "……偏转角度 37 度，推进器全开。我已经算好了。"
-      emotion: "composed"
+      emotion: "沉着"
 
   nextChoices:
     - text: "执行左转规避"

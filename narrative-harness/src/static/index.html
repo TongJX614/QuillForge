@@ -437,6 +437,44 @@ function renderAutoRunResults(data) {
     html += '</div>';
   });
 
+  // 结局展示 — auto-run 展示所有结局
+  const ending = data.ending || {};
+  const allEndings = ending.all_endings || [];
+  if (allEndings.length > 0) {
+    const typeLabel = {bad: '💔 坏结局', normal: '🌗 普通结局', good: '🌟 好结局', true: '✨ 真结局'};
+    const typeColor = {bad: '#ef4444', normal: '#f59e0b', good: '#22c55e', true: '#8b5cf6'};
+    html += `<div style="margin-top:32px;margin-bottom:16px;text-align:center"><h2 style="font-size:22px;color:var(--muted)">📖 所有结局</h2></div>`;
+    allEndings.forEach(e => {
+      const eType = e.type || '';
+      html += `<div class="scene-card" style="border-color:${typeColor[eType] || 'var(--border)'};margin-bottom:16px">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:14px;color:${typeColor[eType] || 'var(--muted)'};margin-bottom:4px">${typeLabel[eType] || '结局'}</div>
+          <h2 style="font-size:28px">${e.title}</h2>
+        </div>
+        ${e.narrative ? `<div style="font-size:15px;line-height:1.8;color:#cbd5e1;padding:16px;background:rgba(59,130,246,.05);border-left:3px solid ${typeColor[eType] || 'var(--accent)'};border-radius:0 8px 8px 0;white-space:pre-wrap;margin-bottom:16px">${e.narrative}</div>` : ''}
+        ${e.epilogue ? `<div style="margin-top:16px"><div style="font-size:13px;color:var(--muted);margin-bottom:8px">📝 尾声</div><div style="font-size:14px;line-height:1.8;color:var(--text);padding:16px;background:rgba(139,92,246,.05);border-radius:10px;white-space:pre-wrap">${e.epilogue}</div></div>` : ''}
+        ${e.replay_value ? `<div style="margin-top:16px;font-size:13px;color:var(--muted);text-align:center;font-style:italic">💭 ${e.replay_value}</div>` : ''}
+      </div>`;
+    });
+  } else if (ending.matched_ending) {
+    // 兼容 Session API 返回的单个匹配结局
+    const matched = ending.matched_ending;
+    const typeLabel = {bad: '💔 坏结局', normal: '🌗 普通结局', good: '🌟 好结局', true: '✨ 真结局'};
+    const typeColor = {bad: '#ef4444', normal: '#f59e0b', good: '#22c55e', true: '#8b5cf6'};
+    const eType = matched.type || '';
+    if (matched.title) {
+      html += `<div class="scene-card" style="border-color:${typeColor[eType] || 'var(--border)'};margin-top:24px">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:14px;color:${typeColor[eType] || 'var(--muted)'};margin-bottom:4px">${typeLabel[eType] || '结局'}</div>
+          <h2 style="font-size:28px">${matched.title}</h2>
+        </div>
+        ${matched.narrative ? `<div style="font-size:15px;line-height:1.8;color:#cbd5e1;padding:16px;background:rgba(59,130,246,.05);border-left:3px solid ${typeColor[eType] || 'var(--accent)'};border-radius:0 8px 8px 0;white-space:pre-wrap;margin-bottom:16px">${matched.narrative}</div>` : ''}
+        ${matched.epilogue ? `<div style="margin-top:16px"><div style="font-size:13px;color:var(--muted);margin-bottom:8px">📝 尾声</div><div style="font-size:14px;line-height:1.8;color:var(--text);padding:16px;background:rgba(139,92,246,.05);border-radius:10px;white-space:pre-wrap">${matched.epilogue}</div></div>` : ''}
+        ${matched.replay_value ? `<div style="margin-top:16px;font-size:13px;color:var(--muted);text-align:center;font-style:italic">💭 ${matched.replay_value}</div>` : ''}
+      </div>`;
+    }
+  }
+
   html += `<div style="text-align:center;margin-top:24px">
     <button class="btn btn-primary" id="backHomeBtn">返回首页</button>
   </div>`;
@@ -579,11 +617,62 @@ async function makeChoice(index, text) {
 }
 
 function renderEnd(state) {
-  app.innerHTML = `<div class="end-screen">
-    <h2>故事结束</h2>
-    <p>你已走完这条世界线的全部场景。</p>
+  const ending = state.ending || {};
+  const matched = ending.matched_ending || {};
+  const narration = ending.narration || '';
+  const dialogues = ending.dialogues || [];
+  const typeLabel = {bad: '💔 坏结局', normal: '🌗 普通结局', good: '🌟 好结局', true: '✨ 真结局'};
+  const typeColor = {bad: '#ef4444', normal: '#f59e0b', good: '#22c55e', true: '#8b5cf6'};
+  const eType = matched.type || '';
+
+  let html = '';
+
+  // 结局场景的旁白和对话
+  if (narration || dialogues.length) {
+    html += `<div class="scene-card" style="margin-bottom:24px">
+      <div class="scene-header">
+        <span class="scene-badge" style="background:${typeColor[eType] || 'var(--accent)'}">终章</span>
+        <span class="scene-title">${matched.title || '结局'}</span>
+      </div>`;
+    if (narration) html += `<div class="narration">${narration}</div>`;
+    if (dialogues.length) {
+      html += '<div class="dialogue-list">';
+      dialogues.forEach(d => {
+        html += `<div class="dialogue-item">
+          <div class="dialogue-avatar" style="background:var(--accent)20;color:var(--accent)">${d.speaker.charAt(0)}</div>
+          <div class="dialogue-bubble">
+            <div class="dialogue-name" style="color:var(--accent)">${d.speaker}</div>
+            <div class="dialogue-text">${d.text}</div>
+          </div></div>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // 匹配的结局详情
+  if (matched.title) {
+    html += `<div class="scene-card" style="border-color:${typeColor[eType] || 'var(--border)'}">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:14px;color:${typeColor[eType] || 'var(--muted)'};margin-bottom:4px">${typeLabel[eType] || '结局'}</div>
+        <h2 style="font-size:28px">${matched.title}</h2>
+      </div>
+      ${matched.narrative ? `<div style="font-size:15px;line-height:1.8;color:#cbd5e1;padding:16px;background:rgba(59,130,246,.05);border-left:3px solid ${typeColor[eType] || 'var(--accent)'};border-radius:0 8px 8px 0;white-space:pre-wrap;margin-bottom:16px">${matched.narrative}</div>` : ''}
+      ${matched.epilogue ? `<div style="margin-top:16px"><div style="font-size:13px;color:var(--muted);margin-bottom:8px">📝 尾声</div><div style="font-size:14px;line-height:1.8;color:var(--text);padding:16px;background:rgba(139,92,246,.05);border-radius:10px;white-space:pre-wrap">${matched.epilogue}</div></div>` : ''}
+      ${matched.replay_value ? `<div style="margin-top:16px;font-size:13px;color:var(--muted);text-align:center;font-style:italic">💭 ${matched.replay_value}</div>` : ''}
+    </div>`;
+  } else {
+    html += `<div class="end-screen">
+      <h2>故事结束</h2>
+      <p>你已走完这条世界线的全部场景。</p>
+    </div>`;
+  }
+
+  html += `<div style="text-align:center;margin-top:24px">
     <button class="btn btn-primary" id="endHomeBtn">返回首页</button>
   </div>`;
+
+  app.innerHTML = html;
   document.getElementById('endHomeBtn').addEventListener('click', showHomeScreen);
 }
 

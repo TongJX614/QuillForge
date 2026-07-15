@@ -73,7 +73,7 @@ class Character:
 class GenerationOptions:
     """生成选项"""
     dialogue_count_min: int = 3
-    dialogue_count_max: int = 6
+    dialogue_count_max: int = 15
     narration_length: str = "medium"  # short | medium | long
     tone: str = ""  # 自动推断
     language: str = "zh-CN"
@@ -127,7 +127,7 @@ class HarnessInput:
                 dc = o["dialogueCount"]
                 if isinstance(dc, int):
                     opts.dialogue_count_min = max(3, dc - 1)
-                    opts.dialogue_count_max = min(6, dc + 1)
+                    opts.dialogue_count_max = min(15, dc + 1)
 
         prev = None
         if "previousContext" in data and data["previousContext"]:

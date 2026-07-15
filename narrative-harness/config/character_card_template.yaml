@@ -5,17 +5,14 @@
 characters:
   - name: "角色姓名"
     role: "身份/职业"
-    personality: "性格关键词（2-4个，逗号分隔）"
-    speakingStyle: "说话风格描述"
-    background: |
-      背景故事摘要（2-3句话）
-    relationships:
-      - target: "其他角色姓名"
-        type: "关系类型（盟友/对手/师徒/恋人等）"
-        description: "关系描述"
-    speechExamples:
-      - "示例对话1：展示角色说话风格"
-      - "示例对话2：展示角色在压力下的反应"
+    personality: "性格描述（2-4句话）"
+    speakingStyle: "说话风格描述（如'简短有力'、'学术腔'）"
+    background: "背景故事摘要（2-3句话）"
+    motivation: "角色动机（推动行为的内在原因）"
+    secrets: "角色秘密（隐藏的真相或未公开的过去）"
+    relationships: "与其他角色的关系描述"
+    appearance: "外貌描述（体态、穿着、特征等）"
+    arc: "成长弧线（角色在故事中的心理/情感变化）"
 
 # ============================================================
 # 性格标签参考库（可复用）

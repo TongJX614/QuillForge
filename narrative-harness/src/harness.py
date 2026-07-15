@@ -243,8 +243,12 @@ class NarrativeHarness:
             "worldbookRules": extra_context.get("_worldbook", ""),
             "plotSummary": extra_context.get("_plotSummary", ""),
             "coreConflict": extra_context.get("_coreConflict", ""),
+            "themes": extra_context.get("_themes", ""),
             "relationshipNetwork": extra_context.get("_relationshipNetwork", ""),
-            "sceneAtmosphere": extra_context.get("_sceneAtmosphere", ""),
+            "sceneAtmosphere": (
+                extra_context.get("_sceneAtmosphere", "")
+                or extra_context.get("_sceneDetails", "")[:200]
+            ),
             "narrativeNotes": extra_context.get("_narrativeNotes", ""),
             "emotionalArc": extra_context.get("_emotionalArc", ""),
             "minDialogues": harness_input.options.dialogue_count_min,
@@ -282,8 +286,22 @@ class NarrativeHarness:
             dialogues = self._stage_dialogue(context, narration, harness_input, rendered_sys_prompt, extra_context)
 
             # ── Stage 4: Choice Branching ──
-            print(f"[Stage 4/5] 选择分支 (attempt {attempt + 1})...")
-            choices = self._stage_choices(context, narration, dialogues, harness_input, rendered_sys_prompt, extra_context)
+            # 当剧本已定义选项时（_hasScriptChoices），跳过 LLM 生成，
+            # 直接使用剧本选项（同时也让验证器看到真实选项）
+            if extra_context.get("_hasScriptChoices"):
+                print(f"[Stage 4/5] 选择分支 (跳过：剧本已定义选项)")
+                script_choices_raw = extra_context.get("_scriptChoices", [])
+                choices = [
+                    Choice(
+                        text=c.get("text", ""),
+                        effect=c.get("effect", ""),
+                        worldline_impact=c.get("worldlineImpact", "advance"),
+                    )
+                    for c in script_choices_raw
+                ]
+            else:
+                print(f"[Stage 4/5] 选择分支 (attempt {attempt + 1})...")
+                choices = self._stage_choices(context, narration, dialogues, harness_input, rendered_sys_prompt, extra_context)
 
             # ── Stage 5: Validation Gate ──
             print(f"[Stage 5/5] 验证门控 (attempt {attempt + 1})...")
@@ -300,6 +318,22 @@ class NarrativeHarness:
             else:
                 failed = [c.name for c in validation.checks if not c.passed]
                 print(f"  [FAIL] 验证未通过: {failed}")
+
+        # ── Fallback：对话保底机制（三层保底：LLM重试 → 简化prompt → 硬编码）──
+        min_req = harness_input.options.dialogue_count_min
+        if len(dialogues) < min_req:
+            print(f"  [FALLBACK] 对话不足 ({len(dialogues)}/{min_req})，启用保底生成...")
+            fallback = self._generate_fallback_dialogues(context, narration, min_req)
+            if fallback:
+                dialogues = fallback
+                print(f"  [FALLBACK] 保底生成 {len(fallback)} 轮对话")
+            # 重新验证（无论保底是否成功）
+            validator = NarrativeValidator(
+                context,
+                min_dialogues=min_req,
+                max_dialogues=harness_input.options.dialogue_count_max,
+            )
+            validation = validator.validate_all(narration, dialogues, choices, retry_count=max_retries + 1)
 
         # 构建输出
         elapsed = int((time.time() - start_time) * 1000)
@@ -356,6 +390,13 @@ class NarrativeHarness:
             "plotSummary": extra.get("_plotSummary", ""),
             "sceneDetails": extra.get("_sceneDetails", ""),
             "worldlines": extra.get("_worldlines", ""),
+            "endings": extra.get("_endings", ""),
+            "keyChoices": extra.get("_keyChoices", ""),
+            "relationshipNetwork": extra.get("_relationshipNetwork", ""),
+            # 当前场景专属剧情上下文
+            "currentStageContext": extra.get("_currentStageContext", ""),
+            "sceneBeats": extra.get("_sceneBeats", ""),
+            "sceneHooks": extra.get("_sceneHooks", ""),
         }
 
         user_prompt = render_template(self.scene_template, variables)
@@ -392,21 +433,109 @@ class NarrativeHarness:
             "relationshipNetwork": extra.get("_relationshipNetwork", ""),
             "sceneDetails": extra.get("_sceneDetails", ""),
             "worldlines": extra.get("_worldlines", ""),
+            "endings": extra.get("_endings", ""),
+            "keyChoices": extra.get("_keyChoices", ""),
+            # 当前场景专属剧情上下文
+            "currentStageContext": extra.get("_currentStageContext", ""),
+            "sceneBeats": extra.get("_sceneBeats", ""),
+            "sceneHooks": extra.get("_sceneHooks", ""),
         }
 
         user_prompt = render_template(self.dialogue_template, variables)
-        raw_dialogues = self.llm.generate_json(sys_prompt or self.system_prompt, user_prompt)
 
         dialogues = []
+        try:
+            raw_dialogues = self.llm.generate_json(sys_prompt or self.system_prompt, user_prompt)
+        except (ValueError, Exception) as e:
+            print(f"  [DIALOGUE] LLM JSON 解析失败: {e}")
+            return dialogues  # 返回空，由 fallback 机制处理
+
         if isinstance(raw_dialogues, list):
+            # 过滤非法 speaker：必须是角色卡中的角色名
+            valid_speakers = {c.name for c in ctx.active_characters}
+            filtered_count = 0
             for d in raw_dialogues:
                 if isinstance(d, dict):
+                    speaker = d.get("speaker", "").strip()
+                    # 过滤掉「系统」「旁白」「叙述者」等非角色 speaker
+                    if speaker not in valid_speakers:
+                        filtered_count += 1
+                        print(f"  [FILTER] 过滤 speaker: '{speaker}' (合法: {valid_speakers})")
+                        continue
                     dialogues.append(Dialogue(
-                        speaker=d.get("speaker", ""),
+                        speaker=speaker,
                         text=d.get("text", ""),
                         emotion=d.get("emotion", ""),
                     ))
+            print(f"  [DIALOGUE] LLM生成 {len(raw_dialogues)} 轮, 过滤 {filtered_count} 轮, 保留 {len(dialogues)} 轮")
+        else:
+            print(f"  [DIALOGUE] LLM返回非列表类型: {type(raw_dialogues).__name__}")
 
+        return dialogues
+
+    def _generate_fallback_dialogues(self, ctx: AssembledContext, narration: str, min_count: int) -> list[Dialogue]:
+        """保底对话生成：用极简 prompt 强制生成最少轮数的对话，失败则硬编码保底"""
+        char_names = [c.name for c in ctx.active_characters]
+        if not char_names:
+            return []
+
+        # 极简 prompt：只给核心信息，避免复杂上下文干扰
+        chars_text = "\n".join(
+            f"- {c.name}（{c.role}）：{c.personality[:80]}，说话风格：{c.speaking_style[:50]}"
+            for c in ctx.active_characters
+        )
+        prompt = (
+            f"你是一位剧本对话作家。请为以下场景写 {min_count} 轮角色对话。\n\n"
+            f"场景：{narration[:200]}\n\n"
+            f"角色：\n{chars_text}\n\n"
+            f"要求：\n"
+            f"1. 必须生成恰好 {min_count} 轮对话\n"
+            f"2. speaker 只能是以下名字之一：{', '.join(char_names)}\n"
+            f"3. 每轮必须有 speaker 和 text\n"
+            f"4. 同一角色不得连续发言超过2轮\n"
+            f"5. 直接输出 JSON 数组，不要添加其他文字\n\n"
+            f'输出格式：[{{"speaker": "角色名", "text": "对话内容", "emotion": "平静"}}]'
+        )
+
+        system = "你是一位专业的剧本对话作家，严格按JSON格式输出。"
+
+        # 尝试 LLM 保底生成
+        try:
+            raw = self.llm.generate_json(system, prompt, _retries=2)
+            dialogues = []
+            valid_speakers = set(char_names)
+            if isinstance(raw, list):
+                for d in raw:
+                    if isinstance(d, dict):
+                        speaker = d.get("speaker", "").strip()
+                        if speaker in valid_speakers and d.get("text"):
+                            dialogues.append(Dialogue(
+                                speaker=speaker,
+                                text=d.get("text", ""),
+                                emotion=d.get("emotion", "平静"),
+                            ))
+            if len(dialogues) >= min_count:
+                return dialogues
+            print(f"  [FALLBACK] LLM保底生成仅 {len(dialogues)} 轮，不足 {min_count}，启用硬编码保底")
+        except Exception as e:
+            print(f"  [FALLBACK] LLM保底生成异常: {e}，启用硬编码保底")
+
+        # 最终保底：硬编码生成最小对话（轮流发言，基于角色性格）
+        print(f"  [FALLBACK] 硬编码保底：为 {char_names} 生成 {min_count} 轮对话")
+        dialogues = []
+        for i in range(min_count):
+            speaker = char_names[i % len(char_names)]
+            # 找到该角色的 Character 对象，获取性格信息
+            char = next((c for c in ctx.active_characters if c.name == speaker), None)
+            role_hint = char.role if char else ""
+            text = f"（{speaker}观察着周围的情况，思考着下一步行动）"
+            if char and char.personality:
+                text = f"（{speaker}以{char.personality[:10]}的态度回应）目前的情况需要我们谨慎应对。"
+            dialogues.append(Dialogue(
+                speaker=speaker,
+                text=text,
+                emotion="平静",
+            ))
         return dialogues
 
     def _stage_choices(self, ctx: AssembledContext, narration: str,
@@ -426,12 +555,22 @@ class NarrativeHarness:
             "coreConflict": extra.get("_coreConflict", ""),
             "sceneDetails": extra.get("_sceneDetails", ""),
             "worldlines": extra.get("_worldlines", ""),
+            "events": extra.get("_events", ""),
+            # 当前场景专属剧情上下文
+            "currentStageContext": extra.get("_currentStageContext", ""),
+            "sceneBeats": extra.get("_sceneBeats", ""),
+            "sceneHooks": extra.get("_sceneHooks", ""),
         }
 
         user_prompt = render_template(self.choice_template, variables)
-        raw_choices = self.llm.generate_json(sys_prompt or self.system_prompt, user_prompt)
 
         choices = []
+        try:
+            raw_choices = self.llm.generate_json(sys_prompt or self.system_prompt, user_prompt)
+        except (ValueError, Exception) as e:
+            print(f"  [CHOICES] LLM JSON 解析失败: {e}")
+            return choices  # 返回空，不影响整体流程
+
         if isinstance(raw_choices, list):
             for c in raw_choices:
                 if isinstance(c, dict):

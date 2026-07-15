@@ -88,7 +88,7 @@ class NarrativeValidator:
         )
 
     def check_dialogue_count(self, dialogues: list[Dialogue]) -> ValidationCheck:
-        """对话轮数检查：必须在 [min, max] 范围内"""
+        """对话轮数检查：至少 min 轮，最多 max 轮"""
         count = len(dialogues)
         ok = self.min_dialogues <= count <= self.max_dialogues
         return ValidationCheck(

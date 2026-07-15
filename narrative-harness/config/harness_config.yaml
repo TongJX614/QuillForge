@@ -2,7 +2,7 @@
 # 控制 Pipeline 各阶段的行为参数
 
 harness:
-  version: "1.0.0"
+  version: "3.2.0"
   name: "Narrative Generation Harness"
 
   # LLM 配置
@@ -22,7 +22,7 @@ harness:
 
     narrativeAnchoring:
       enabled: true
-      promptTemplate: "prompts/scene_assembly.md"
+      promptTemplate: "prompts/narration_v2.md"
       narrationLength:
         short: [50, 150]    # 字数范围
         medium: [100, 300]
@@ -30,15 +30,15 @@ harness:
 
     dialogueGeneration:
       enabled: true
-      promptTemplate: "prompts/dialogue_generation.md"
+      promptTemplate: "prompts/dialogue_v2.md"
       dialogueCount:
         min: 3
-        max: 6
+        max: 15
         default: 4
 
     choiceBranching:
       enabled: true
-      promptTemplate: "prompts/choice_branching.md"
+      promptTemplate: "prompts/choices_v2.md"
       choiceCount:
         min: 2
         max: 4
