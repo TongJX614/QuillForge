@@ -17,6 +17,7 @@ import json
 import time
 import tempfile
 import shutil
+import concurrent.futures
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Any
@@ -42,6 +43,13 @@ from generic_adapter import (
 )
 from harness import NarrativeHarness
 from schemas import HarnessInput
+from image_gen import (
+    ImageGenerator, build_character_prompt, build_background_prompt,
+    slugify, IMAGES_DIR, DEFAULT_BG_SIZE, DEFAULT_CHAR_SIZE,
+)
+
+# 美术素材并行生成并发数（Seedream IPM 充足，6 路并发兼顾速度与稳定；可经 IMAGE_CONCURRENCY 调整）
+IMAGE_CONCURRENCY = int(os.getenv("IMAGE_CONCURRENCY", "6"))
 
 
 # ═══════════════════════════════════════════════════════
@@ -576,6 +584,66 @@ class GameSession:
             "progress": round(self.progress, 2),
         }
 
+    def generate_stream(self, harness: NarrativeHarness):
+        """流式生成：逐阶段 yield SSE 事件，完成后更新会话状态"""
+        if self.state == SessionState.GENERATED:
+            yield {"event": "error", "message": "当前场景已生成，请先做出选择后才能继续"}
+            return
+        if self.state == SessionState.FINISHED:
+            yield {"event": "error", "message": "故事已结束"}
+            return
+        if self.current_scene_index >= self.total_scenes:
+            yield {"event": "error", "message": "没有更多场景"}
+            return
+
+        player_choice = ""
+        if self.history:
+            player_choice = self.history[-1].get("player_choice", "")
+
+        harness_input = self.adapter.build_harness_input(
+            self.current_scene_index,
+            player_choice=player_choice,
+            previous_context=self.previous_result.get("data") if self.previous_result else None,
+        )
+
+        scene = self.adapter.scenes[self.current_scene_index] if self.current_scene_index < len(self.adapter.scenes) else {}
+        script_choices = self.adapter.get_scene_choices(self.current_scene_index)
+
+        def _meta_event() -> dict:
+            return {
+                "event": "meta",
+                "scene_meta": {
+                    "scene_id": scene.get("id", ""),
+                    "scene_name": scene.get("name", f"场景 {self.current_scene_index + 1}"),
+                    "location": scene.get("location", ""),
+                    "scene_index": self.current_scene_index + 1,
+                    "total_scenes": self.total_scenes,
+                },
+                "available_choices": script_choices,
+                "session_state": self.state.value,
+                "progress": round(self.progress, 2),
+            }
+
+        # 先下发场景元信息：场景 id/名称/位置在生成前就已知，提前下发可让前端
+        # 在旁白流式开始前就应用背景图、显示场景名，避免整段旁白期间背景停留在
+        # 占位色、场景信息停留在“生成中…”（修复“旁白已出但背景不显示/生成完还要等”）
+        yield _meta_event()
+
+        result = None
+        for evt in harness.run_stream(harness_input):
+            if evt.get("event") == "done":
+                result = evt.get("result")
+            yield evt
+
+        # 流结束后更新会话状态
+        if result:
+            self.current_result = result
+            self.state = SessionState.GENERATED
+
+        # 再次下发 meta：携带生成完成后的最终 session_state（generated）与 progress，
+        # 前端据此显示选项
+        yield _meta_event()
+
     def choose(self, choice_index: int, choice_text: str) -> dict:
         if self.state != SessionState.GENERATED:
             raise HTTPException(400, f"当前状态为 {self.state.value}，无法做出选择")
@@ -807,6 +875,17 @@ def get_harness() -> NarrativeHarness:
     if harness is None:
         harness = NarrativeHarness()
     return harness
+
+
+image_generator: Optional[ImageGenerator] = None
+
+
+def get_image_generator() -> ImageGenerator:
+    """生图器单例（未配置 IMAGE_API_KEY 时 enabled=False，调用方回退占位图）"""
+    global image_generator
+    if image_generator is None:
+        image_generator = ImageGenerator()
+    return image_generator
 
 
 # ───────────────────────────────────────────────────
@@ -1277,6 +1356,135 @@ def generate_scene(session_id: str):
     return session.generate(get_harness())
 
 
+@app.post("/api/session/{session_id}/generate-stream", summary="流式生成场景（SSE）")
+def generate_scene_stream(session_id: str):
+    """
+    SSE 流式版本的场景生成。
+    Pipeline 各阶段产出时立即推送给前端，无需等待全部完成。
+    """
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(404, "会话不存在")
+
+    def event_stream():
+        for evt in session.generate_stream(get_harness()):
+            evt_type = evt.get("event", "message")
+            payload = json.dumps(evt, ensure_ascii=False)
+            yield f"event: {evt_type}\ndata: {payload}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/session/{session_id}/assets-stream", summary="预生成美术素材（SSE）")
+def assets_stream(session_id: str):
+    """
+    游戏开始时一次性预生成全部角色立绘 + 场景背景（SSE 逐个推送进度）。
+    已缓存的图片直接复用（命中磁盘缓存，与是否配置 IMAGE_API_KEY 无关），不重复调用生图 API；
+    未配置 IMAGE_API_KEY 且无缓存时回退占位图（enabled=false）。
+    """
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(404, "会话不存在")
+
+    gen = get_image_generator()
+    script_slug = slugify(session.adapter.title)
+    characters = session.adapter.characters or []
+    scenes = session.adapter.scenes or []
+
+    def event_stream():
+        char_urls: dict[str, str] = {}
+        scene_urls: dict[str, str] = {}
+
+        # 统一构建任务列表（角色立绘 + 场景背景），随后线程池并发生成
+        tasks: list[dict] = []
+        # 1) 角色立绘（以角色名 key，与对话 speaker 对应）
+        for c in characters:
+            name = str(c.get("name", "")).strip()
+            cid = str(c.get("id", "") or name)
+            if not name:
+                continue
+            tasks.append({"kind": "character", "cache_kind": "char", "cache_id": cid,
+                          "name": name, "prompt": build_character_prompt(c),
+                          "size": DEFAULT_CHAR_SIZE, "store": ("char", name, "")})
+        # 2) 场景背景（以 scene_id key，与 meta.scene_id 对应；同时以 name 做后备）
+        # 提示词素材优先取素材清单的场景素材（name/mood/details，按顺序对应），无素材时用游戏场景字段
+        bg_sources = session.adapter.get_scene_bg_sources()
+        for i, s in enumerate(scenes):
+            sid = str(s.get("id", "") or s.get("name", ""))
+            sname = str(s.get("name", "") or sid)
+            asset = bg_sources[i] if i < len(bg_sources) else s
+            tasks.append({"kind": "scene", "cache_kind": "bg", "cache_id": sid,
+                          "name": sname, "prompt": build_background_prompt(asset),
+                          "size": DEFAULT_BG_SIZE, "store": ("scene", sid, sname)})
+
+        total = len(tasks)
+        # 不再因 enabled=False 提前返回：generate() 缓存命中时直接返回 URL（与 enabled 无关），
+        # 纯缓存模式（未配置 IMAGE_API_KEY）下已缓存的图片仍可正常返回；未缓存的回退占位图。
+        yield {"event": "assets_meta", "enabled": gen.enabled, "total": total,
+               "message": (f"正在并行生成美术素材（共 {total} 张）" if gen.enabled
+                           else "加载美术素材（缓存模式）")}
+
+        # 并发生成：各任务写不同缓存文件、共享 OpenAI client 线程安全，无需加锁
+        done = 0
+        max_workers = min(total, IMAGE_CONCURRENCY) if total else 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_map = {
+                executor.submit(gen.generate, script_slug, t["cache_kind"],
+                                t["cache_id"], t["prompt"], t["size"]): t
+                for t in tasks
+            }
+            for fut in concurrent.futures.as_completed(future_map):
+                t = future_map[fut]
+                try:
+                    url = fut.result()
+                except Exception:
+                    url = None
+                if url:
+                    store_kind, key_a, key_b = t["store"]
+                    if store_kind == "char":
+                        char_urls[key_a] = url
+                    else:
+                        scene_urls[key_a] = url
+                        if key_b and key_b != key_a:
+                            scene_urls[key_b] = url
+                done += 1
+                yield {"event": "asset_progress", "kind": t["kind"], "name": t["name"],
+                       "done": done, "total": total,
+                       "status": "done" if url else "fallback", "url": url}
+
+        yield {"event": "assets_done", "enabled": gen.enabled,
+               "characters": char_urls, "scenes": scene_urls}
+
+    def sse():
+        for evt in event_stream():
+            evt_type = evt.get("event", "message")
+            yield f"event: {evt_type}\ndata: {json.dumps(evt, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        sse(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/generated_images/{path:path}", summary="读取生成的美术素材图片")
+def serve_generated_image(path: str):
+    base = IMAGES_DIR.resolve()
+    file_path = (IMAGES_DIR / path).resolve()
+    # 安全检查：必须落在缓存目录内且确实存在
+    if base not in file_path.parents or not file_path.is_file():
+        raise HTTPException(404, "图片不存在")
+    return FileResponse(file_path, media_type="image/png",
+                        headers={"Cache-Control": "no-cache"})  # 不缓存：用户可能手动替换图片
+
+
 @app.post("/api/session/{session_id}/choose")
 def submit_choice(session_id: str, req: ChoiceRequest):
     session = sessions.get(session_id)
@@ -1305,7 +1513,8 @@ def get_history(session_id: str):
 def index():
     html_path = Path(__file__).resolve().parent / "static" / "index.html"
     if html_path.exists():
-        return FileResponse(html_path)
+        # no-cache：浏览器每次请求都向服务器校验，避免缓存旧版前端代码导致修复不生效
+        return FileResponse(html_path, headers={"Cache-Control": "no-cache"})
     return {"message": "Narrative Harness API v3.0 - Visit /docs"}
 
 

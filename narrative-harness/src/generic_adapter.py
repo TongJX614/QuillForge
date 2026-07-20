@@ -30,6 +30,7 @@ class GenericScriptAdapter:
         self.title: str = "未命名剧本"
         self.characters: list[dict] = []
         self.scenes: list[dict] = []
+        self.scene_assets: list[dict] = []  # 素材清单里的「场景背景」素材（name/mood/details）
         self.worldline_nodes: list[str] = []
         self.worldbook: str = ""
         self.narrative_style: str = ""
@@ -111,6 +112,9 @@ class GenericScriptAdapter:
 
         # ── 场景解析（支持多种格式） ──
         self.scenes = self._parse_scenes(data)
+
+        # ── 场景背景素材解析（素材清单.yaml：name/mood/details） ──
+        self.scene_assets = self._parse_scene_assets(data)
 
         # ── 世界书 ──
         if not self.worldbook:
@@ -226,10 +230,16 @@ class GenericScriptAdapter:
         if len(arc) > 100:
             arc = arc[:100] + "…"
 
+        # 年龄 / 职业（用于生图提示词；此前 age 被丢弃、occupation 仅作 role 后备）
+        age = str(c.get("age", c.get("年龄", ""))).strip()
+        occupation = str(c.get("occupation", c.get("职业", ""))).strip()
+
         return {
             "id": c.get("id", c.get("character_id", "")),
             "name": str(name),
             "role": str(role),
+            "age": age,
+            "occupation": occupation,
             "personality": str(personality),
             "speakingStyle": str(speaking_style),
             "background": background,
@@ -325,6 +335,39 @@ class GenericScriptAdapter:
             "narrative_notes": s.get("narrative_notes", s.get("notes", "")),
         }
 
+    def _parse_scene_assets(self, data: dict) -> list[dict]:
+        """从素材清单.yaml 的 assets.visual 中提取「场景背景」素材（name/mood/details）。
+        找不到时返回 []（此时生图回退用游戏场景自身字段）。"""
+        assets = data.get("assets", {})
+        visual = assets.get("visual", []) if isinstance(assets, dict) else []
+        if isinstance(visual, list):
+            for item in visual:
+                if isinstance(item, dict) and item.get("type") == "场景背景":
+                    raw_scenes = item.get("scenes", [])
+                    if isinstance(raw_scenes, list):
+                        return [
+                            {
+                                "name": str(s.get("name", "")).strip(),
+                                "mood": str(s.get("mood", "")).strip(),
+                                "details": str(s.get("details", "")).strip(),
+                            }
+                            for s in raw_scenes
+                            if isinstance(s, dict)
+                        ]
+        return []
+
+    def get_scene_bg_sources(self) -> list[dict]:
+        """为每个游戏场景匹配用于生图背景的场景素材。
+        按顺序一一对应：第 i 个游戏场景配 scene_assets[i]（回响里游戏场景 location
+        与素材 name 正好吻合，验证了此顺序）；scene_assets 不够长时用游戏场景自身字段兜底。"""
+        result: list[dict] = []
+        for i, s in enumerate(self.scenes):
+            if i < len(self.scene_assets):
+                result.append(self.scene_assets[i])
+            else:
+                result.append(s)
+        return result
+
     def _find_scene_name(self, scene_id: str, data: dict) -> str:
         """根据 scene_id 查找场景名称"""
         s = self._find_scene_data(scene_id, data)
@@ -403,7 +446,29 @@ class GenericScriptAdapter:
         harness_input["_narrativeStyle"] = self.narrative_style or "第二人称叙事"
         harness_input["_sceneAtmosphere"] = scene.get("atmosphere", "")
         harness_input["_narrativeNotes"] = scene.get("narrative_notes", "")
-        harness_input["_emotionalArc"] = ""
+        harness_input["_emotionalArc"] = self._extract_emotional_arc(scene_index)
+
+        # ── 剧本全局上下文注入（与 auto-run 流对齐） ──
+        scene_id = scene.get("id", "")
+        harness_input["_plotSummary"] = self._extract_plot_summary()
+        harness_input["_coreConflict"] = self._extract_core_conflict()
+        harness_input["_themes"] = self._extract_themes()
+        harness_input["_relationshipNetwork"] = self._extract_relationship_network()
+        harness_input["_stagesOverview"] = self._extract_stages_overview()
+        harness_input["_currentStageContext"] = self._extract_current_stage_context(scene_id)
+        harness_input["_sceneBeats"] = self._extract_beats_for_scene(scene_id)
+        harness_input["_sceneHooks"] = self._extract_hooks_for_scene(scene_id)
+        harness_input["_events"] = self._extract_events()
+        harness_input["_keyChoices"] = self._extract_key_choices()
+        harness_input["_endings"] = self._extract_endings()
+        harness_input["_worldlines"] = self._extract_worldlines()
+        harness_input["_sceneDetails"] = self._extract_scene_details(scene)
+
+        # 当本场景有剧本选项时，标记跳过 Stage 4 的 LLM 生成
+        script_choices = self.get_scene_choices(scene_index)
+        if script_choices:
+            harness_input["_hasScriptChoices"] = True
+            harness_input["_scriptChoices"] = script_choices
 
         return harness_input
 
@@ -460,15 +525,432 @@ class GenericScriptAdapter:
         return result
 
     def _extract_worldbook_rules(self) -> str:
-        """从世界书提取关键约束"""
+        """从世界书提取关键约束（扩展版：含世界背景、核心科技、组织设定、社会规则）"""
         if not self.worldbook:
             return ""
         rules = []
+        # 约束类章节（优先级最高）
         for section_name in ["必须遵守", "禁止出现", "情感基调", "故事边界"]:
             match = re.search(rf'###?\s*{section_name}\s*\n(.*?)(?=###?|\Z)', self.worldbook, re.DOTALL)
             if match:
                 rules.append(f"【{section_name}】{match.group(1).strip()}")
-        return "\n\n".join(rules) if rules else self.worldbook[:500]
+        # 设定类章节（提供世界观背景）
+        for section_name in ["世界背景", "核心科技", "组织设定", "社会规则"]:
+            match = re.search(rf'##?\s*{section_name}\s*\n(.*?)(?=##?|\Z)', self.worldbook, re.DOTALL)
+            if match:
+                content = match.group(1).strip()
+                # 截断过长的设定（避免 prompt 过长）
+                if len(content) > 400:
+                    content = content[:400] + "…"
+                rules.append(f"【{section_name}】{content}")
+        if rules:
+            return "\n\n".join(rules)
+        # 如果没找到任何章节，返回世界书前 1000 字
+        return self.worldbook[:1000]
+
+    # ───────────────────────────────────────────────────
+    # 剧本上下文提取方法（与 server.py _format_* 系列对齐）
+    # ───────────────────────────────────────────────────
+
+    def _get_main_plot(self) -> dict:
+        """获取 main_plot 数据（兼容多种嵌套格式）"""
+        data = self.raw_data
+        if "main_plot" in data:
+            return data["main_plot"] if isinstance(data["main_plot"], dict) else {}
+        for key in ("script", "story", "剧本"):
+            sub = data.get(key, {})
+            if isinstance(sub, dict) and "main_plot" in sub:
+                return sub["main_plot"]
+        return {}
+
+    def _extract_plot_summary(self) -> str:
+        """提取剧情概要"""
+        plot = self._get_main_plot()
+        return str(plot.get("summary", "")).strip()
+
+    def _extract_core_conflict(self) -> str:
+        """提取核心冲突"""
+        plot = self._get_main_plot()
+        return str(plot.get("core_conflict", "")).strip()
+
+    def _extract_themes(self) -> str:
+        """提取故事主题"""
+        plot = self._get_main_plot()
+        themes = plot.get("themes", [])
+        if not themes:
+            return ""
+        return "；".join(str(t)[:50] for t in themes[:5])
+
+    def _extract_relationship_network(self) -> str:
+        """提取角色关系网络（含动态变化）"""
+        rels = self.raw_data.get("relationships", [])
+        if not rels:
+            return ""
+        parts = []
+        for r in rels[:6]:
+            if isinstance(r, dict):
+                src = r.get("source", "")
+                tgt = r.get("target", "")
+                rtype = r.get("type", "")
+                desc = str(r.get("description", "")).strip()[:80]
+                line = f"{src} - {tgt}（{rtype}）：{desc}"
+                # 动态发展
+                development = r.get("development", [])
+                if isinstance(development, list) and development:
+                    dev_strs = []
+                    for d in development[:3]:
+                        if isinstance(d, dict):
+                            trigger = str(d.get("trigger", ""))[:30]
+                            change = str(d.get("change", ""))[:30]
+                            dev_strs.append(f"{trigger}→{change}")
+                    if dev_strs:
+                        line += f"\n  动态变化：{'；'.join(dev_strs)}"
+                parts.append(line)
+        return "\n".join(parts)
+
+    def _extract_stages_overview(self) -> str:
+        """提取主线剧情阶段总览"""
+        plot = self._get_main_plot()
+        stages = plot.get("stages", [])
+        if not stages:
+            return ""
+        parts = []
+        for i, s in enumerate(stages):
+            if isinstance(s, dict):
+                name = s.get("name", f"阶段{i+1}")
+                scenes_val = s.get("scenes", s.get("scene", ""))
+                scene_str = ", ".join(str(x) for x in scenes_val) if isinstance(scenes_val, list) else str(scenes_val)
+                desc = str(s.get("description", "")).strip()[:80]
+                key_events = s.get("key_events", []) or []
+                events_str = "；".join(
+                    (str(e.get("name", e))[:20] if isinstance(e, dict) else str(e)[:20])
+                    for e in key_events[:3]
+                ) if key_events else ""
+                emotional_arc = str(s.get("emotional_arc", "")).strip()
+                line = f"{'→' if i > 0 else '●'} {name}"
+                if scene_str:
+                    line += f"（场景：{scene_str}）"
+                if desc:
+                    line += f" — {desc}"
+                if events_str:
+                    line += f"\n   关键事件：{events_str}"
+                if emotional_arc:
+                    line += f"\n   情感弧线：{emotional_arc}"
+                parts.append(line)
+        return "\n".join(parts)
+
+    def _extract_current_stage_context(self, scene_id: str) -> str:
+        """提取当前场景对应阶段的剧情要求"""
+        plot = self._get_main_plot()
+        stages = plot.get("stages", [])
+        if not stages or not scene_id:
+            return ""
+        # 查找包含当前场景的阶段
+        current_stage = None
+        for s in stages:
+            if isinstance(s, dict):
+                scenes = s.get("scenes", [])
+                if isinstance(scenes, list) and scene_id in scenes:
+                    current_stage = s
+                    break
+        if not current_stage:
+            return ""
+        parts = []
+        name = current_stage.get("name", "")
+        desc = str(current_stage.get("description", "")).strip()
+        if name:
+            parts.append(f"当前阶段：{name}")
+        if desc:
+            parts.append(f"阶段目标：{desc}")
+        key_events = current_stage.get("key_events", []) or []
+        if key_events:
+            events = []
+            for e in key_events:
+                if isinstance(e, dict):
+                    events.append(str(e.get("name", e.get("description", "")))[:40])
+                else:
+                    events.append(str(e)[:40])
+            parts.append("本场景必须体现的关键事件：")
+            for i, ev in enumerate(events, 1):
+                parts.append(f"  {i}. {ev}")
+        emotional_arc = str(current_stage.get("emotional_arc", "")).strip()
+        if emotional_arc:
+            parts.append(f"情感弧线走向：{emotional_arc}")
+        return "\n".join(parts)
+
+    def _extract_beats_for_scene(self, scene_id: str) -> str:
+        """提取当前场景的剧情节拍"""
+        plot = self._get_main_plot()
+        beats = plot.get("beats", [])
+        if not beats or not scene_id:
+            return ""
+        relevant = [b for b in beats if isinstance(b, dict) and b.get("scene") == scene_id]
+        if not relevant:
+            return ""
+        parts = []
+        for b in relevant:
+            name = b.get("name", "")
+            desc = str(b.get("description", "")).strip()[:80]
+            purpose = str(b.get("purpose", "")).strip()[:60]
+            line = f"● {name}"
+            if desc:
+                line += f"：{desc}"
+            if purpose:
+                line += f"（叙事目的：{purpose}）"
+            parts.append(line)
+        return "\n".join(parts)
+
+    def _extract_hooks_for_scene(self, scene_id: str) -> str:
+        """提取当前场景的剧情钩子"""
+        plot = self._get_main_plot()
+        hooks = plot.get("hooks", [])
+        if not hooks or not scene_id:
+            return ""
+        relevant = [h for h in hooks if isinstance(h, dict) and h.get("scene") == scene_id]
+        if not relevant:
+            return ""
+        parts = []
+        for h in relevant:
+            htype = h.get("type", "")
+            desc = str(h.get("description", "")).strip()[:80]
+            parts.append(f"[{htype}] {desc}")
+        return "\n".join(parts)
+
+    def _extract_events(self) -> str:
+        """提取事件清单"""
+        events = self.raw_data.get("events", [])
+        if not events:
+            return ""
+        parts = []
+        for e in events[:8]:
+            if isinstance(e, dict):
+                name = e.get("name", e.get("title", ""))
+                tc_raw = e.get("trigger_conditions", [])
+                if isinstance(tc_raw, list):
+                    trigger_cond = "；".join(
+                        str(c.get("value", c.get("type", c))).strip()[:30]
+                        for c in tc_raw[:3] if isinstance(c, dict)
+                    )
+                else:
+                    trigger_cond = str(tc_raw).strip()[:60]
+                content = str(e.get("content", e.get("description", ""))).strip()[:100]
+                chars_involved = e.get("characters_involved", [])
+                line = f"【{name}】"
+                if trigger_cond:
+                    line += f"\n  触发条件：{trigger_cond}"
+                if chars_involved:
+                    line += f"\n  涉及角色：{', '.join(str(c) for c in chars_involved[:3])}"
+                if content:
+                    line += f"\n  内容：{content}"
+                parts.append(line)
+        return "\n\n".join(parts)
+
+    def _extract_key_choices(self) -> str:
+        """提取关键选择"""
+        choices = self.raw_data.get("choices", self.raw_data.get("key_choices", []))
+        if not choices:
+            return ""
+        parts = []
+        for c in choices[:6]:
+            if isinstance(c, dict):
+                name = c.get("prompt", c.get("name", c.get("title", "")))
+                if not name:
+                    name = str(c.get("description", ""))[:60]
+                position = c.get("scene_id", "")
+                opts = c.get("options", []) or []
+                option_strs = []
+                for o in opts[:4]:
+                    if isinstance(o, dict):
+                        text = str(o.get("text", o.get("label", ""))).strip()[:40]
+                        opt_desc = str(o.get("description", "")).strip()[:50]
+                        cons_raw = o.get("consequences", {})
+                        if isinstance(cons_raw, dict):
+                            consequence = str(cons_raw.get("immediate", "")).strip()[:60]
+                        else:
+                            consequence = str(cons_raw).strip()[:60]
+                        personality = str(o.get("personality_impact", "")).strip()[:40]
+                        leads_to = o.get("leads_to_ending", "")
+                        opt = f"「{text}」"
+                        if opt_desc:
+                            opt += f" — {opt_desc}"
+                        if consequence:
+                            opt += f"\n     即时后果：{consequence}"
+                        if personality:
+                            opt += f"\n     性格体现：{personality}"
+                        if leads_to:
+                            opt += f"\n     导向结局：{leads_to}"
+                        option_strs.append(opt)
+                line = f"【{name}】"
+                if position:
+                    line += f"（场景：{position}）"
+                if option_strs:
+                    line += "\n  " + "\n  ".join(option_strs)
+                parts.append(line)
+        return "\n\n".join(parts)
+
+    def _extract_endings(self) -> str:
+        """提取结局系统"""
+        endings = self.raw_data.get("endings", [])
+        if not endings:
+            return ""
+        parts = []
+        for e in endings[:5]:
+            if isinstance(e, dict):
+                name = e.get("title", e.get("name", ""))
+                etype = e.get("type", "")
+                cond_val = e.get("trigger_conditions", [])
+                if isinstance(cond_val, list):
+                    condition = "；".join(
+                        str(c.get("value", c))[:30] for c in cond_val[:3] if isinstance(c, dict)
+                    ) if cond_val else ""
+                else:
+                    condition = str(cond_val).strip()[:60]
+                narrative = str(e.get("narrative", "")).strip()[:80]
+                line = f"结局「{name}」（{etype}）"
+                if condition:
+                    line += f"\n  达成条件：{condition}"
+                if narrative:
+                    line += f"\n  叙事：{narrative}"
+                parts.append(line)
+        return "\n\n".join(parts)
+
+    def _extract_worldlines(self) -> str:
+        """提取世界线结构（含分支路径、汇聚点、规则）"""
+        world_lines = self.raw_data.get("world_lines", [])
+        if not world_lines:
+            return ""
+        parts = []
+        for wl in world_lines[:4]:
+            if isinstance(wl, dict):
+                name = wl.get("name", wl.get("id", ""))
+                desc = str(wl.get("description", "")).strip()[:80]
+                path = wl.get("path", [])
+                path_strs = []
+                for p in sorted(path, key=lambda x: x.get("sequence", 0)) if isinstance(path, list) else []:
+                    if isinstance(p, dict):
+                        sid = p.get("scene_id", "")
+                        pdesc = str(p.get("description", "")).strip()[:30]
+                        path_strs.append(f"{sid}({pdesc})" if pdesc else sid)
+                path_line = " → ".join(path_strs) if path_strs else ""
+                conditions = wl.get("conditions", [])
+                cond_str = ""
+                if isinstance(conditions, list) and conditions:
+                    cond_str = "；".join(
+                        str(c.get("value", c))[:30] for c in conditions[:2] if isinstance(c, dict)
+                    )
+                consequences = str(wl.get("consequences", "")).strip()[:80]
+                end_ending = wl.get("end结局", wl.get("end_ending", ""))
+                line = f"● {name}"
+                if desc:
+                    line += f" — {desc}"
+                if path_line:
+                    line += f"\n  路径：{path_line}"
+                if cond_str:
+                    line += f"\n  触发条件：{cond_str}"
+                if consequences:
+                    line += f"\n  后果：{consequences}"
+                if end_ending:
+                    line += f"\n  结局：{end_ending}"
+                parts.append(line)
+        # 汇聚点
+        convergence = self.raw_data.get("convergence_points", [])
+        if convergence:
+            conv_strs = []
+            for cp in convergence[:3]:
+                if isinstance(cp, dict):
+                    sid = cp.get("scene_id", "")
+                    cdesc = str(cp.get("description", "")).strip()[:50]
+                    conv_strs.append(f"{sid}: {cdesc}" if cdesc else sid)
+            if conv_strs:
+                parts.append("\n【汇聚点】" + "；".join(conv_strs))
+        # 规则
+        rules = self.raw_data.get("rules", [])
+        if rules:
+            rule_strs = []
+            for r in rules[:4]:
+                if isinstance(r, dict):
+                    rname = r.get("name", r.get("rule_id", ""))
+                    rdesc = str(r.get("description", "")).strip()[:60]
+                    cond = str(r.get("condition", "")).strip()[:40]
+                    effect = str(r.get("effect", "")).strip()[:40]
+                    rule_strs.append(f"{rname}: {rdesc}（条件：{cond} → {effect}）")
+            if rule_strs:
+                parts.append("\n【世界线规则】" + "\n  " + "\n  ".join(rule_strs))
+        return "\n\n".join(parts)
+
+    def _extract_scene_details(self, scene: dict) -> str:
+        """提取当前场景的详细信息（氛围、叙事指导、互动、分支点）"""
+        if not scene:
+            return ""
+        parts = []
+        atmosphere = str(scene.get("atmosphere", "")).strip()
+        if atmosphere:
+            parts.append(f"氛围：{atmosphere}")
+        time_val = str(scene.get("time", "")).strip()
+        if time_val:
+            parts.append(f"时间：{time_val}")
+        notes = str(scene.get("narrative_notes", "")).strip()
+        if notes:
+            parts.append(f"叙事指导：{notes}")
+        chars = scene.get("characters_present", [])
+        if chars:
+            parts.append(f"在场角色：{', '.join(str(c) for c in chars)}")
+        # 互动
+        interactions = scene.get("interactions", [])
+        if isinstance(interactions, list) and interactions:
+            for inter in interactions[:2]:
+                if isinstance(inter, dict):
+                    itype = inter.get("type", "")
+                    idesc = str(inter.get("description", "")).strip()[:60]
+                    iprompt = str(inter.get("prompt", "")).strip()[:80]
+                    line = f"互动（{itype}）：{idesc}"
+                    if iprompt:
+                        line += f"\n  提示：{iprompt}"
+                    iopts = inter.get("options", [])
+                    if isinstance(iopts, list) and iopts:
+                        opt_strs = []
+                        for o in iopts[:4]:
+                            if isinstance(o, dict):
+                                txt = str(o.get("text", "")).strip()[:30]
+                                odesc = str(o.get("description", "")).strip()[:40]
+                                opt_strs.append(f"「{txt}」{odesc}")
+                        if opt_strs:
+                            line += "\n  可选行动：" + "；".join(opt_strs)
+                    parts.append(line)
+        # 分支点
+        if scene.get("branching_point"):
+            parts.append("⚠ 本场景是分支决策点，选择将影响后续走向")
+        # 关联的关键选择
+        critical_choice_id = scene.get("critical_choice")
+        if critical_choice_id:
+            choices = self.raw_data.get("choices", self.raw_data.get("key_choices", []))
+            for kc in (choices if isinstance(choices, list) else []):
+                if isinstance(kc, dict) and kc.get("id") == critical_choice_id:
+                    prompt = str(kc.get("prompt", "")).strip()
+                    if prompt:
+                        parts.append(f"本场景关键拉择：{prompt}")
+                    break
+        return "\n".join(parts)
+
+    def _extract_emotional_arc(self, scene_index: int) -> str:
+        """提取当前场景对应阶段的情感弧线"""
+        plot = self._get_main_plot()
+        stages = plot.get("stages", [])
+        if not stages:
+            return ""
+        # 尝试通过场景 ID 匹配
+        scene_id = ""
+        if scene_index < len(self.scenes):
+            scene_id = self.scenes[scene_index].get("id", "")
+        for s in stages:
+            if isinstance(s, dict):
+                scenes = s.get("scenes", [])
+                if isinstance(scenes, list) and scene_id in scenes:
+                    return str(s.get("emotional_arc", "")).strip()
+        # 回退：按索引匹配
+        if scene_index < len(stages):
+            return str(stages[scene_index].get("emotional_arc", "")).strip()
+        return ""
 
     def to_summary(self) -> dict:
         """返回剧本摘要信息"""

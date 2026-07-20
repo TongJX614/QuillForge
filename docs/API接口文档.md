@@ -1,6 +1,6 @@
 # Narrative Harness — API 接口文档
 
-> 版本：3.2.0 | 基础地址：`http://localhost:8765` | Swagger 文档：`http://localhost:8765/docs`
+> 版本：4.0.0 | 基础地址：`http://localhost:8765` | Swagger 文档：`http://localhost:8765/docs`
 
 ---
 
@@ -203,7 +203,54 @@
 
 ---
 
-### 3.5 POST `/api/session/{session_id}/choose` — 提交玩家选择
+### 3.5 POST `/api/session/{session_id}/generate-stream` — 流式生成场景（SSE）
+
+流式版本的场景生成。Pipeline 各阶段产出时立即推送给前端，无需等待全部完成。旁白逐字推送、对话逐条推送，第一条对话在生成完成时即出现。
+
+**路径参数**：`session_id` — 会话 ID
+
+**响应**：`text/event-stream`，事件类型：
+
+| 事件 | 时机 | data 内容 |
+|------|------|----------|
+| `meta` | 流开头 + 结尾各一次 | `{"scene_id", "scene_name", "script_choices", "session_state"}` — 前端据此应用背景图/场景名 |
+| `stage` | 每个阶段开始 | `{"stage": 1-5, "message": "..."}` |
+| `narration_start` | 旁白开始生成 | `{}` |
+| `narration_delta` | 旁白逐字推送 | `{"delta": "增量文本"}` |
+| `narration` | 旁白完成 | `{"text": "完整旁白"}` |
+| `dialogue` | 每条对话解析完成 | `{"speaker", "text", "emotion"}` |
+| `action` | 动作/心理旁白 | `{"subject": "角色名", "text": "描写"}` |
+| `choices` | 选项生成完成 | `{"choices": [{text, effect, worldlineImpact}]}` |
+| `retry` | 验证失败重试 | `{"attempt": N}` |
+| `error` | 异常 | `{"message": "..."}` |
+
+> `meta` 在流开头先下发一次（背景/场景名即时应用），结尾再下发一次（携带 session_state=generated 供前端显示选项）。
+
+---
+
+### 3.6 GET `/api/session/{session_id}/assets-stream` — 预生成美术素材（SSE）
+
+游戏开始时一次性预生成全部角色立绘 + 场景背景，线程池并行执行。已缓存的图片直接复用（与是否配置 IMAGE_API_KEY 无关），未配置且无缓存时回退占位图。
+
+**响应**：`text/event-stream`，事件类型：
+
+| 事件 | 时机 | data 内容 |
+|------|------|----------|
+| `assets_meta` | 开始 | `{"enabled": bool, "total": N, "message": "..."}` |
+| `asset_progress` | 每张完成 | `{"kind": "character"|"scene", "name", "done", "total", "status": "done"|"fallback", "url"}` |
+| `assets_done` | 全部完成 | `{"characters": {角色名: url}, "scenes": {scene_id: url}}` |
+
+---
+
+### 3.7 GET `/generated_images/{path}` — 读取生成的图片
+
+返回 `generated_images/` 缓存目录下的图片文件（PNG）。响应头 `Cache-Control: no-cache`，确保手动替换图片后浏览器即时更新。
+
+**路径示例**：`/generated_images/回响/char_su_ran_f529e7fb.png`
+
+---
+
+### 3.8 POST `/api/session/{session_id}/choose` — 提交玩家选择
 
 玩家选择后自动续写下一场景。
 
@@ -220,7 +267,7 @@
 
 ---
 
-### 3.6 GET `/api/session/{session_id}/state` — 查询会话状态
+### 3.9 GET `/api/session/{session_id}/state` — 查询会话状态
 
 **响应**：
 
@@ -237,7 +284,9 @@
 
 ---
 
-### 3.7 GET `/api/session/{session_id}/history` — 查看对话历史
+### 3.10 GET `/api/session/{session_id}/history` — 查看对话历史
+
+历史含每个场景的旁白、完整对话和玩家选择。
 
 **响应**：
 
@@ -593,15 +642,18 @@ const decoder = new TextDecoder();
 
 | Method | Path | 类型 | 用途 |
 |--------|------|------|------|
-| GET | `/` | 前端 | 首页（加载/上传/内置示例） |
-| GET | `/play` | 前端 | 互动剧情 Web 界面 |
+| GET | `/` | 前端 | Galgame VN 主界面（流式演出/立绘/自动播放/历史） |
+| GET | `/play` | 前端 | 轻量版互动剧情 Web 界面 |
 | POST | `/api/upload` | Session | 上传单个剧本文件 |
 | POST | `/api/upload-directory` | Session | 上传文件夹 |
 | POST | `/api/load-folder` | 便捷 | 从本地路径加载剧本 |
 | POST | `/api/auto-run` | 便捷 | 一键运行全部场景 |
 | POST | `/api/auto-run/stream` | 便捷 | SSE 流式一键运行（逐场景推送） |
 | POST | `/api/start` | Session | 创建游戏会话 |
-| POST | `/api/session/{id}/generate` | Session | 生成当前场景 |
+| POST | `/api/session/{id}/generate` | Session | 生成当前场景（同步） |
+| POST | `/api/session/{id}/generate-stream` | Session | 流式生成场景（SSE 逐条推送） |
+| GET | `/api/session/{id}/assets-stream` | Session | 预生成美术素材（SSE 并行生图） |
+| GET | `/generated_images/{path}` | 资源 | 读取生成的背景/立绘图片 |
 | POST | `/api/session/{id}/choose` | Session | 提交玩家选择 |
 | GET | `/api/session/{id}/state` | Session | 查询会话状态 |
 | GET | `/api/session/{id}/history` | Session | 查看对话历史 |

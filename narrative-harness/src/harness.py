@@ -168,6 +168,25 @@ class LLMClient:
         )
         return response.choices[0].message.content or ""
 
+    def generate_stream(self, system_prompt: str, user_prompt: str, model: str = ""):
+        """调用 LLM 并以流式逐块 yield 输出文本（用于旁白实时推送）"""
+        stream = self.client.chat.completions.create(
+            model=model or self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stream=True,
+        )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta is not None and delta.content:
+                yield delta.content
+
     def generate_json(self, system_prompt: str, user_prompt: str, model: str = "", _retries: int = 2) -> dict | list:
         """调用 LLM 并解析 JSON 输出，失败自动重试"""
         last_err = None
@@ -195,6 +214,48 @@ class LLMClient:
                     print(f"  [JSON RETRY] 解析失败，重试第 {attempt + 1} 次...")
                     continue
         raise ValueError(f"无法解析 LLM 输出为 JSON (重试 {_retries} 次):\n{last_err}")
+
+    def generate_json_stream(self, system_prompt: str, user_prompt: str, model: str = ""):
+        """流式调用 LLM，增量解析 JSON 数组并逐个 yield 其中的顶层对象。
+        用于对话流式推送：每解析出一条完整对象立即 yield，无需等待整个数组生成完，
+        从而消除“旁白播完后干等全部对话生成”的空白等待。
+        采用括号深度 + 字符串状态机扫描（游标只前进，整体 O(n)），
+        兼容 ```json 代码块包裹、数组括号以及对象内嵌套/转义引号。"""
+        buf = ""
+        pos = 0          # 已扫描游标
+        depth = 0        # 当前对象嵌套深度
+        in_string = False
+        escape = False
+        obj_start = -1   # 当前顶层对象起始位置
+        for chunk in self.generate_stream(system_prompt, user_prompt, model):
+            buf += chunk
+            while pos < len(buf):
+                ch = buf[pos]
+                if in_string:
+                    if escape:
+                        escape = False
+                    elif ch == "\\":
+                        escape = True
+                    elif ch == '"':
+                        in_string = False
+                else:
+                    if ch == '"':
+                        in_string = True
+                    elif ch == "{":
+                        if depth == 0:
+                            obj_start = pos
+                        depth += 1
+                    elif ch == "}":
+                        if depth > 0:
+                            depth -= 1
+                            if depth == 0 and obj_start != -1:
+                                obj_str = buf[obj_start:pos + 1]
+                                try:
+                                    yield json.loads(obj_str)
+                                except json.JSONDecodeError:
+                                    pass
+                                obj_start = -1
+                pos += 1
 
 
 # ═══════════════════════════════════════════════════════
@@ -363,12 +424,184 @@ class NarrativeHarness:
         print(f"{'=' * 50}")
         return result
 
+    def run_stream(self, input_data: dict | HarnessInput):
+        """
+        流式 Pipeline：逐阶段 yield 事件字典，供 SSE 推送。
+        事件类型: stage / narration / dialogue / choices / retry / done / error
+        """
+        start_time = time.time()
+
+        try:
+            # 提取额外上下文
+            extra_context = {}
+            if isinstance(input_data, dict):
+                extra_context = {k: v for k, v in input_data.items() if k.startswith("_")}
+                harness_input = HarnessInput.from_dict(input_data)
+            else:
+                harness_input = input_data
+
+            if harness_input.options.model:
+                self.llm.model = harness_input.options.model
+
+            # 构建系统提示词
+            sys_prompt_vars = {
+                "narrativeStyle": extra_context.get("_narrativeStyle", "第三人称叙事"),
+                "worldbookRules": extra_context.get("_worldbook", ""),
+                "plotSummary": extra_context.get("_plotSummary", ""),
+                "coreConflict": extra_context.get("_coreConflict", ""),
+                "themes": extra_context.get("_themes", ""),
+                "relationshipNetwork": extra_context.get("_relationshipNetwork", ""),
+                "sceneAtmosphere": (
+                    extra_context.get("_sceneAtmosphere", "")
+                    or extra_context.get("_sceneDetails", "")[:200]
+                ),
+                "narrativeNotes": extra_context.get("_narrativeNotes", ""),
+                "emotionalArc": extra_context.get("_emotionalArc", ""),
+                "minDialogues": harness_input.options.dialogue_count_min,
+                "maxDialogues": harness_input.options.dialogue_count_max,
+            }
+            rendered_sys_prompt = render_template(self.system_prompt_dynamic, sys_prompt_vars)
+
+            # ── Stage 1: Context Assembly ──
+            yield {"event": "stage", "stage": 1, "message": "正在组装上下文..."}
+            print("[Stream Stage 1/5] 上下文组装...")
+            context = AssembledContext.from_input(harness_input)
+
+            max_retries = (
+                self.config.get("harness", {})
+                .get("stages", {})
+                .get("validationGate", {})
+                .get("maxRetries", 2)
+            )
+
+            narration = ""
+            dialogues: list[Dialogue] = []
+            choices: list[Choice] = []
+            validation: Optional[ValidationResult] = None
+
+            for attempt in range(max_retries + 1):
+                if attempt > 0:
+                    yield {"event": "retry", "attempt": attempt}
+                    print(f"  [Stream RETRY] 重试第 {attempt} 次...")
+
+                # ── Stage 2: Narrative Anchoring（逐字流式推送） ──
+                yield {"event": "stage", "stage": 2, "message": "正在生成旁白..."}
+                print(f"[Stream Stage 2/5] 叙事锚定 (attempt {attempt + 1})...")
+                yield {"event": "narration_start"}
+                narration = ""
+                for delta in self._stage_narrative_stream(context, harness_input, rendered_sys_prompt, extra_context):
+                    narration += delta
+                    yield {"event": "narration_delta", "delta": delta}
+                narration = self._clean_narration(narration)
+                # 最终完整旁白（供前端校对/非流式回退）
+                yield {"event": "narration", "text": narration}
+
+                # ── Stage 3: Dialogue Generation（流式：逐条解析逐条推送） ──
+                yield {"event": "stage", "stage": 3, "message": "正在生成对话..."}
+                print(f"[Stream Stage 3/5] 对话生成 (attempt {attempt + 1})...")
+                dialogues = []
+                for item in self._stage_dialogue_stream(context, narration, harness_input, rendered_sys_prompt, extra_context):
+                    if item["kind"] == "dialogue":
+                        d = item["dialogue"]
+                        dialogues.append(d)
+                        yield {"event": "dialogue", "speaker": d.speaker, "text": d.text, "emotion": d.emotion}
+                    else:  # action 动作/心理旁白穿插（以旁白形式呈现，不计入 dialogues 验证列表）
+                        yield {"event": "action", "subject": item["subject"], "text": item["text"]}
+
+                # ── Stage 4: Choice Branching ──
+                yield {"event": "stage", "stage": 4, "message": "正在生成选项..."}
+                if extra_context.get("_hasScriptChoices"):
+                    print(f"[Stream Stage 4/5] 选择分支 (跳过：剧本已定义选项)")
+                    script_choices_raw = extra_context.get("_scriptChoices", [])
+                    choices = [
+                        Choice(
+                            text=c.get("text", ""),
+                            effect=c.get("effect", ""),
+                            worldline_impact=c.get("worldlineImpact", "advance"),
+                        )
+                        for c in script_choices_raw
+                    ]
+                else:
+                    print(f"[Stream Stage 4/5] 选择分支 (attempt {attempt + 1})...")
+                    choices = self._stage_choices(context, narration, dialogues, harness_input, rendered_sys_prompt, extra_context)
+                yield {"event": "choices", "choices": [c.to_dict() for c in choices]}
+
+                # ── Stage 5: Validation Gate ──
+                yield {"event": "stage", "stage": 5, "message": "正在验证..."}
+                print(f"[Stream Stage 5/5] 验证门控 (attempt {attempt + 1})...")
+                validator = NarrativeValidator(
+                    context,
+                    min_dialogues=harness_input.options.dialogue_count_min,
+                    max_dialogues=harness_input.options.dialogue_count_max,
+                )
+                validation = validator.validate_all(narration, dialogues, choices, retry_count=attempt)
+
+                if validation.passed:
+                    print("  [OK] 验证通过")
+                    break
+                else:
+                    failed = [c.name for c in validation.checks if not c.passed]
+                    print(f"  [FAIL] 验证未通过: {failed}")
+
+            # Fallback 保底
+            min_req = harness_input.options.dialogue_count_min
+            if len(dialogues) < min_req:
+                print(f"  [Stream FALLBACK] 对话不足 ({len(dialogues)}/{min_req})，启用保底生成...")
+                fallback = self._generate_fallback_dialogues(context, narration, min_req)
+                if fallback:
+                    dialogues = fallback
+                    # 重新推送对话
+                    yield {"event": "retry", "attempt": max_retries + 1}
+                    yield {"event": "narration", "text": narration}
+                    for d in dialogues:
+                        yield {"event": "dialogue", "speaker": d.speaker, "text": d.text, "emotion": d.emotion}
+                    yield {"event": "choices", "choices": [c.to_dict() for c in choices]}
+                validator = NarrativeValidator(
+                    context,
+                    min_dialogues=min_req,
+                    max_dialogues=harness_input.options.dialogue_count_max,
+                )
+                validation = validator.validate_all(narration, dialogues, choices, retry_count=max_retries + 1)
+
+            # 构建最终输出（与 run() 保持一致）
+            elapsed = int((time.time() - start_time) * 1000)
+            worldline_state = {
+                "currentNode": context.current_node,
+                "nodeIndex": context.node_index,
+                "totalNodes": context.total_nodes,
+                "progress": round(context.worldline_progress, 2),
+            }
+            output = HarnessOutput(
+                success=validation.passed if validation else False,
+                narration=narration,
+                dialogues=dialogues,
+                next_choices=choices,
+                worldline_state=worldline_state,
+                validation=validation or ValidationResult(passed=False, checks=[]),
+                metadata={"generationTime": elapsed, "model": self.llm.model},
+            )
+            result = output.to_dict()
+            print(f"\n{'=' * 50}")
+            print(f"Stream Pipeline 完成 | 耗时: {elapsed}ms | 验证: {'通过' if output.success else '未通过'}")
+            print(f"{'=' * 50}")
+
+            yield {
+                "event": "done",
+                "success": output.success,
+                "validation": result.get("validation", {}),
+                "elapsed_ms": elapsed,
+                "result": result,
+            }
+
+        except Exception as e:
+            yield {"event": "error", "message": str(e)}
+
     # ───────────────────────────────────────────────────
     # Stage 实现
     # ───────────────────────────────────────────────────
 
-    def _stage_narrative(self, ctx: AssembledContext, inp: HarnessInput, sys_prompt: str = "", extra: dict = None) -> str:
-        """Stage 2: 生成场景旁白"""
+    def _build_narrative_prompt(self, ctx: AssembledContext, inp: HarnessInput, extra: dict) -> str:
+        """构建旁白生成的 user prompt（供非流式/流式两个版本共享）"""
         extra = extra or {}
         variables = {
             "worldline": ctx.raw_worldline,
@@ -398,17 +631,28 @@ class NarrativeHarness:
             "sceneBeats": extra.get("_sceneBeats", ""),
             "sceneHooks": extra.get("_sceneHooks", ""),
         }
+        return render_template(self.scene_template, variables)
 
-        user_prompt = render_template(self.scene_template, variables)
-        narration = self.llm.generate(sys_prompt or self.system_prompt, user_prompt)
-
-        # 清理可能的 markdown 标记
+    @staticmethod
+    def _clean_narration(narration: str) -> str:
+        """清理旁白中可能的 markdown 标记"""
         narration = narration.strip()
         if narration.startswith("```"):
             narration = re.sub(r'^```[a-z]*\n?', '', narration)
             narration = re.sub(r'\n?```$', '', narration)
-
         return narration.strip()
+
+    def _stage_narrative(self, ctx: AssembledContext, inp: HarnessInput, sys_prompt: str = "", extra: dict = None) -> str:
+        """Stage 2: 生成场景旁白（非流式，供 run() 使用）"""
+        user_prompt = self._build_narrative_prompt(ctx, inp, extra)
+        narration = self.llm.generate(sys_prompt or self.system_prompt, user_prompt)
+        return self._clean_narration(narration)
+
+    def _stage_narrative_stream(self, ctx: AssembledContext, inp: HarnessInput, sys_prompt: str = "", extra: dict = None):
+        """Stage 2（流式）: 生成场景旁白，逐块 yield 文本增量"""
+        user_prompt = self._build_narrative_prompt(ctx, inp, extra)
+        for delta in self.llm.generate_stream(sys_prompt or self.system_prompt, user_prompt):
+            yield delta
 
     def _stage_dialogue(self, ctx: AssembledContext, narration: str, inp: HarnessInput, sys_prompt: str = "", extra: dict = None) -> list[Dialogue]:
         """Stage 3: 生成对话"""
@@ -472,6 +716,77 @@ class NarrativeHarness:
             print(f"  [DIALOGUE] LLM返回非列表类型: {type(raw_dialogues).__name__}")
 
         return dialogues
+
+    def _stage_dialogue_stream(self, ctx: AssembledContext, narration: str, inp: HarnessInput, sys_prompt: str = "", extra: dict = None):
+        """Stage 3（流式）: 生成对话 + 穿插动作/心理旁白，逐个 yield 字典项。
+        复用与 _stage_dialogue 相同的 prompt 变量，但改用 generate_json_stream 增量解析，
+        每解析出一条立即 yield，让前端在生成过程中就能逐条显示。
+        yield 项有两种：
+          {"kind": "dialogue", "dialogue": Dialogue}  —— 真实对话（计入验证/历史）
+          {"kind": "action", "subject": str, "text": str} —— 动作/心理旁白（仅显示，不计入对话验证）
+        """
+        extra = extra or {}
+        opts = inp.options
+        variables = {
+            "narration": narration,
+            "characters": ctx.active_characters,
+            "annotatedWorldline": ctx.annotated_worldline,
+            "currentNode": ctx.current_node,
+            "nextNode": ctx.next_node or "（终局）",
+            "worldlineProgress": int(ctx.worldline_progress * 100),
+            "playerDecision": ctx.player_decision,
+            "dialogueCount": (opts.dialogue_count_min + opts.dialogue_count_max) // 2,
+            "minDialogues": opts.dialogue_count_min,
+            "maxDialogues": opts.dialogue_count_max,
+            "previousDialogues": inp.previous_context.dialogues if inp.previous_context else [],
+            # 剧本全局上下文
+            "events": extra.get("_events", ""),
+            "stagesOverview": extra.get("_stagesOverview", ""),
+            "coreConflict": extra.get("_coreConflict", ""),
+            "relationshipNetwork": extra.get("_relationshipNetwork", ""),
+            "sceneDetails": extra.get("_sceneDetails", ""),
+            "worldlines": extra.get("_worldlines", ""),
+            "endings": extra.get("_endings", ""),
+            "keyChoices": extra.get("_keyChoices", ""),
+            # 当前场景专属剧情上下文
+            "currentStageContext": extra.get("_currentStageContext", ""),
+            "sceneBeats": extra.get("_sceneBeats", ""),
+            "sceneHooks": extra.get("_sceneHooks", ""),
+        }
+        user_prompt = render_template(self.dialogue_template, variables)
+        valid_speakers = {c.name for c in ctx.active_characters}
+        kept = 0
+        filtered_count = 0
+        action_count = 0
+        for d in self.llm.generate_json_stream(sys_prompt or self.system_prompt, user_prompt):
+            if not isinstance(d, dict):
+                continue
+            text = str(d.get("text", "")).strip()
+            dtype = str(d.get("type", "")).strip().lower()
+            speaker = str(d.get("speaker", "")).strip()
+            # 动作/神态/心理旁白穿插项（type=action，或无 speaker 但有 text 的描写对象）
+            if dtype in ("action", "narration", "beat") or (not speaker and text):
+                if not text:
+                    continue
+                subject = str(d.get("subject", "") or speaker).strip()
+                # subject 必须是合法角色，否则去掉前缀按普通旁白处理
+                if subject not in valid_speakers:
+                    subject = ""
+                action_count += 1
+                yield {"kind": "action", "subject": subject, "text": text}
+                continue
+            # 过滤掉「系统」「旁白」「叙述者」等非角色 speaker
+            if speaker not in valid_speakers:
+                filtered_count += 1
+                print(f"  [FILTER] 过滤 speaker: '{speaker}' (合法: {valid_speakers})")
+                continue
+            kept += 1
+            yield {"kind": "dialogue", "dialogue": Dialogue(
+                speaker=speaker,
+                text=d.get("text", ""),
+                emotion=d.get("emotion", ""),
+            )}
+        print(f"  [DIALOGUE-STREAM] 对话 {kept} 轮, 动作旁白 {action_count} 条, 过滤 {filtered_count} 轮")
 
     def _generate_fallback_dialogues(self, ctx: AssembledContext, narration: str, min_count: int) -> list[Dialogue]:
         """保底对话生成：用极简 prompt 强制生成最少轮数的对话，失败则硬编码保底"""

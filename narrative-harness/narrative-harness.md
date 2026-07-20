@@ -1,6 +1,6 @@
 # Narrative Generation Harness — 技术规格文档
 
-> **版本**: 3.2.0 | **最后更新**: 2026-07-12
+> **版本**: 4.0.0 | **最后更新**: 2026-07-20
 
 ## 概述
 
@@ -10,7 +10,7 @@ Narrative Generation Harness 是一个结构化的 AI 文本生成 Pipeline，�
 - **扁平结构**（4 文件）：元数据 + 角色 + 主线 + 场景
 - **嵌套结构**（11 文件）：额外含世界线、事件、结局、角色关系、世界书等
 
-通过 `generic_adapter.py` 自动识别并按关键词匹配文件，`harness.py` 执行 5 阶段 Pipeline，`server.py` 提供 19 个 API 端点（Session API + 轻量 API + 便捷 API）。
+通过 `generic_adapter.py` 自动识别并按关键词匹配文件，`harness.py` 执行 5 阶段 Pipeline（支持 SSE 流式输出），`image_gen.py` 提供美术素材生成（磁盘缓存 + 并行），`server.py` 提供 22 个 API 端点（Session API + 轻量 API + 便捷 API + 资源端点）。前端为 Galgame 视觉小说界面，支持流式演出、角色立绘、自动播放、历史记录、结局滚动等。
 
 ---
 
@@ -143,7 +143,7 @@ Narrative Generation Harness 是一个结构化的 AI 文本生成 Pipeline，�
 
 ### Stage 3: Dialogue Generation（对话生成）
 
-**目的：** 生成 **3-15 轮**符合角色性格的对话。
+**目的：** 生成 **3-15 轮**符合角色性格的对话，并少量穿插动作/心理旁白。
 
 **输入：** `AssembledContext` + `narration`
 
@@ -155,8 +155,19 @@ Narrative Generation Harness 是一个结构化的 AI 文本生成 Pipeline，�
 2. 同一角色不连续发言超过 2 轮
 3. 对话长度：短句 5-15 字（紧张场景），长句 15-40 字（分析/讨论场景）
 4. 必须体现性格标签：冷静理性的角色不会大喊大叫，果断务实的角色不会犹豫不决
-5. 最后一轮对话应自然过渡到"决策点"
+5. 最后一轮对话应自然过渡到“决策点”
 6. 情绪标签使用中文：平静/急切/分析/果断/担忧/愤怒/希望/好奇/沉着/讽刺/恐惧/坚定/紧张/释然/中性
+
+**动作/心理旁白穿插：**
+
+- 输出为混合 JSON 数组：对话对象 `{speaker, text, emotion}` 与动作对象 `{type:"action", subject, text}` 交替
+- 克制使用：整段对话最多穿插 1-2 条，只在情绪转折或关键反应时添加
+- 动作旁白不计入 dialogues 验证列表（避免破坏 dialogue_count/character_consistency 校验）
+- subject 非合法角色时自动净化为普通旁白
+
+**流式输出（generate_json_stream）：**
+
+采用「括号深度 + 字符串状态机」增量解析 LLM 流式输出，每解析出一条完整 JSON 对象立即 yield，无需等待整个数组生成完。第一条对话在生成完成时即推送前端，消除“旁白播完后干等对话”的空白等待。
 
 **输出：** `dialogues` 数组
 
@@ -364,22 +375,25 @@ Pipeline 重试（max_retries=2 次）
 
 ## API 端点总览
 
-共 **19 个端点**（16 路由 + 3 文档端点）：
+共 **22 个端点**（19 路由 + 3 文档端点）：
 
 | Method | Path | 类型 | 用途 |
 |--------|------|------|------|
-| GET | `/` | 前端 | 首页 |
-| GET | `/play` | 前端 | 互动剧情 Web 界面 |
+| GET | `/` | 前端 | Galgame VN 主界面（流式演出/立绘/自动播放/历史） |
+| GET | `/play` | 前端 | 轻量版互动剧情 Web 界面 |
 | POST | `/api/upload` | Session | 上传单个剧本文件 |
 | POST | `/api/upload-directory` | Session | 上传文件夹 |
 | POST | `/api/load-folder` | 便捷 | 从本地路径加载剧本 |
 | POST | `/api/auto-run` | 便捷 | 一键运行全部场景 |
 | POST | `/api/auto-run/stream` | 便捷 | SSE 流式一键运行 |
 | POST | `/api/start` | Session | 创建游戏会话 |
-| POST | `/api/session/{id}/generate` | Session | 生成当前场景 |
+| POST | `/api/session/{id}/generate` | Session | 生成当前场景（同步） |
+| POST | `/api/session/{id}/generate-stream` | Session | 流式生成场景（SSE 逐条推送） |
+| GET | `/api/session/{id}/assets-stream` | Session | 预生成美术素材（SSE 并行生图） |
+| GET | `/generated_images/{path}` | 资源 | 读取生成的背景/立绘图片 |
 | POST | `/api/session/{id}/choose` | Session | 提交玩家选择 |
 | GET | `/api/session/{id}/state` | Session | 查询会话状态 |
-| GET | `/api/session/{id}/history` | Session | 查看对话历史 |
+| GET | `/api/session/{id}/history` | Session | 查看对话历史（含旁白+对话+选择） |
 | POST | `/api/story` | 轻量 | 加载剧本数据 |
 | POST | `/api/scene` | 轻量 | 生成/续写场景 |
 | GET | `/api/samples` | 便捷 | 内置示例列表 |
@@ -444,16 +458,19 @@ Pipeline 重试（max_retries=2 次）
 
 | 文件 | 用途 |
 |------|------|
-| `src/server.py` | FastAPI 后端，19 个 API 端点 |
-| `src/harness.py` | 5 阶段 Pipeline 核心引擎 |
+| `src/server.py` | FastAPI 后端，22 个 API 端点 |
+| `src/harness.py` | 5 阶段 Pipeline 核心引擎（含流式生成 run_stream） |
 | `src/schemas.py` | 数据模型定义（Character/HarnessInput/Dialogue/Choice 等） |
 | `src/validator.py` | 8 项验证器 |
+| `src/image_gen.py` | 生图模块（OpenAI 兼容协议，磁盘缓存，无 Key 回退占位图） |
 | `src/generic_adapter.py` | 通用剧本适配器（扁平/嵌套结构自动识别） |
 | `src/echo_adapter.py` | 回响-DEMO 专用适配器 |
+| `src/static/index.html` | Galgame VN 主界面（流式演出/立绘/自动播放/历史/结局滚动） |
+| `src/static/web_play.html` | 轻量版互动剧情界面 |
 | `prompts/system_prompt_v2.md` | 系统提示词模板 |
 | `prompts/system_prompt_dynamic.md` | 动态系统提示词（叙事风格/世界书/概要/冲突/关系） |
 | `prompts/narration_v2.md` | Stage 2 旁白生成模板 |
-| `prompts/dialogue_v2.md` | Stage 3 对话生成模板 |
+| `prompts/dialogue_v2.md` | Stage 3 对话生成模板（含动作旁白穿插规则） |
 | `prompts/choices_v2.md` | Stage 4 选择生成模板 |
 
 ---
@@ -462,6 +479,7 @@ Pipeline 重试（max_retries=2 次）
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 4.0.0 | 2026-07-20 | 流式生成 SSE（旁白逐字/对话逐条/动作旁白）、生图模块（并行+磁盘缓存）、Galgame VN 前端（立绘双槽位/自动播放/历史含对话/结局滚动）、端点 19→22 |
 | 3.2.0 | 2026-07-12 | 对话轮数 3-15，三层保底机制，6 剧本支持，项目清理 |
 | 3.1.0 | 2026-07-12 | API 文档完善，SSE 流式端点，剧本选项优先机制 |
 | 3.0.0 | 2026-07-12 | 角色卡 10 字段，全数据注入，5 剧本验收通过 |

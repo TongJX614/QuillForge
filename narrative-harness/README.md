@@ -2,7 +2,7 @@
 
 AI 驱动的互动叙事生成 Pipeline，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。
 
-> **版本**: 3.2.0 | **对话轮数**: 3-15 | **API 端点**: 19 个
+> **版本**: 4.0.0 | **对话轮数**: 3-15 | **API 端点**: 22 个 | **前端**: Galgame 视觉小说界面（流式演出）
 
 ## 快速开始
 
@@ -51,12 +51,16 @@ narrative-harness/
 │   ├── worldline_template.yaml       # 世界线模板
 │   └── example_scene.yaml            # 示例场景（含预期输出）
 ├── src/                              # 源代码
-│   ├── server.py                     # FastAPI 后端（19 个 API 端点）
-│   ├── harness.py                    # Pipeline 引擎（5 阶段）
+│   ├── server.py                     # FastAPI 后端（22 个 API 端点）
+│   ├── harness.py                    # Pipeline 引擎（5 阶段 + 流式生成）
 │   ├── schemas.py                    # 数据模型（Character 10 字段）
 │   ├── validator.py                  # 验证器（8 项检查）
+│   ├── image_gen.py                  # 生图模块（OpenAI 兼容协议 + 磁盘缓存 + 并行）
 │   ├── generic_adapter.py            # 通用剧本适配器（扁平/嵌套结构）
-│   └── echo_adapter.py              # 回响-DEMO 专用适配器
+│   ├── echo_adapter.py              # 回响-DEMO 专用适配器
+│   └── static/                       # 前端页面
+│       ├── index.html                # Galgame VN 主界面（流式演出/立绘/自动播放/历史）
+│       └── web_play.html             # 轻量版互动剧情界面
 └── tests/                            # 测试套件
     ├── test_acceptance.py            # 验收测试
     ├── test_echo_e2e.py              # 回响-DEMO 专项测试（67 项）
@@ -87,13 +91,17 @@ Pipeline 重试（最多 2 次）→ 简化 prompt 重试 → 硬编码保底（
 | 便捷 | `POST /api/auto-run` | 一键运行全部场景 |
 | 便捷 | `POST /api/auto-run/stream` | SSE 流式一键运行 |
 | Session | `POST /api/start` | 创建游戏会话 |
-| Session | `POST /api/session/{id}/generate` | 生成当前场景 |
+| Session | `POST /api/session/{id}/generate` | 生成当前场景（同步） |
+| Session | `POST /api/session/{id}/generate-stream` | **流式生成场景（SSE 逐条推送）** |
+| Session | `GET /api/session/{id}/assets-stream` | **预生成美术素材（SSE 并行生图）** |
 | Session | `POST /api/session/{id}/choose` | 提交玩家选择 |
+| 资源 | `GET /generated_images/{path}` | 读取生成的背景/立绘图片 |
 | 轻量 | `POST /api/story` | 加载剧本数据 |
 | 轻量 | `POST /api/scene` | 生成/续写场景 |
-| 前端 | `GET /play` | 互动剧情 Web 界面 |
+| 前端 | `GET /` | Galgame VN 主界面 |
+| 前端 | `GET /play` | 轻量版互动剧情界面 |
 
-> 完整 19 个端点详见 [API 接口文档](../docs/API接口文档.md)。
+> 完整 22 个端点详见 [API 接口文档](../docs/API接口文档.md)。
 
 ## 输入/输出示例
 
@@ -199,3 +207,19 @@ result_2 = harness.run({
 | `DEEPSEEK_MODEL` | 模型名称（默认 deepseek-chat） |
 | `DEEPSEEK_BASE_URL` | API 地址（默认 https://api.deepseek.com） |
 | `OPENAI_API_KEY` | 通用 OpenAI 兼容 API Key（优先级高于 DEEPSEEK） |
+| `IMAGE_API_KEY` | 生图 API Key（不配置则禁用生图，走纯缓存/占位模式） |
+| `IMAGE_BASE_URL` | 生图 API 地址（默认火山方舟） |
+| `IMAGE_MODEL` | 生图模型（默认 doubao-seedream-5-0-260128） |
+| `IMAGE_SIZE_BG` | 背景尺寸（默认 2560x1440） |
+| `IMAGE_SIZE_CHAR` | 立绘尺寸（默认 1440x2560） |
+| `IMAGE_CONCURRENCY` | 生图并发数（默认 4） |
+
+## Galgame 前端特性
+
+- **流式演出**：旁白逐字打字机 + 对话逐条即时渲染（SSE generate-stream）
+- **角色立绘**：动态双槽位（左/右），说话者高亮、新角色登场淡入替换
+- **动作旁白**：对话间少量穿插角色动作/心理描写（斜体弱化 + 角色名前缀）
+- **自动播放**：按文本长度估算阅读时间自动推进
+- **历史记录**：含旁白 + 完整对话 + 玩家选择
+- **结局演出**：全屏顶端向下滚动打字机 + 结局卡片
+- **美术素材**：开局并行预生成背景/立绘（磁盘缓存复用，无 Key 回退占位图）
