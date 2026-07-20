@@ -1182,11 +1182,30 @@ async def upload_directory(files: list[UploadFile] = File(...)):
 
 @app.get("/api/samples")
 def list_samples():
-    """列出内置示例剧本"""
+    """列出内置示例剧本（支持单文件和目录结构）"""
     samples = []
     if SAMPLES_DIR.exists():
         for f in sorted(SAMPLES_DIR.glob("*")):
-            if f.suffix in (".yaml", ".yml", ".json"):
+            if f.is_dir():
+                # 目录类型剧本：检查是否包含 yaml/json 文件
+                has_data = any(
+                    p.suffix in (".yaml", ".yml", ".json")
+                    for p in f.rglob("*") if p.is_file()
+                )
+                if not has_data:
+                    continue
+                try:
+                    adapter = GenericScriptAdapter()
+                    adapter.load(str(f))
+                    samples.append({
+                        "id": f.name,
+                        "filename": f.name,
+                        "path": str(f),
+                        **adapter.to_summary(),
+                    })
+                except Exception:
+                    samples.append({"id": f.name, "filename": f.name, "error": "解析失败"})
+            elif f.suffix in (".yaml", ".yml", ".json"):
                 try:
                     adapter = GenericScriptAdapter()
                     adapter.load(str(f))
