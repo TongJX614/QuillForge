@@ -1,8 +1,8 @@
-# Narrative Generation Harness
+# QuillForge
 
-AI 驱动的互动叙事生成 Pipeline，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。
+基于 **Harness 架构**的 AI 互动叙事生成引擎，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。支持**选择驱动叙事**：玩家选择影响后续剧情走向、解锁隐藏选项、触发不同结局。
 
-> **版本**: 3.2.0 | **对话轮数**: 3-15 | **API 端点**: 19 个
+> **版本**: 5.0.0 | **最后更新**: 2026-07-24 | **对话轮数**: 3-15 | **API 端点**: 22 个
 
 ## 快速开始
 
@@ -10,22 +10,22 @@ AI 驱动的互动叙事生成 Pipeline，根据剧本数据（世界线大纲�
 # 安装依赖
 pip install -r requirements.txt
 
-# 启动服务器（端口 8765）
+# 启动服务器（端口 8766）
 python server_start.py
 
 # 或直接启动（跳过浏览器自动打开）
-python src/server.py --host 127.0.0.1 --port 8765
+python src/server.py --host 127.0.0.1 --port 8766
 
 # API 文档
-# Swagger UI: http://127.0.0.1:8765/docs
-# ReDoc:      http://127.0.0.1:8765/redoc
+# Swagger UI: http://127.0.0.1:8766/docs
+# ReDoc:      http://127.0.0.1:8766/redoc
 ```
 
 ### 一键运行剧本
 
 ```powershell
 # 上传剧本文件夹并自动生成全部场景
-curl -X POST http://127.0.0.1:8765/api/load-folder \
+curl -X POST http://127.0.0.1:8766/api/load-folder \
   -H "Content-Type: application/json" \
   -d '{"path": "C:/path/to/剧本目录"}'
 ```
@@ -33,8 +33,8 @@ curl -X POST http://127.0.0.1:8765/api/load-folder \
 ## 项目结构
 
 ```
-narrative-harness/
-├── narrative-harness.md              # 完整技术规格文档
+quillforge/
+├── quillforge.md                   # 完整技术规格文档
 ├── README.md                         # 本文件
 ├── requirements.txt                  # Python 依赖
 ├── server_start.py                   # 服务器启动器（含 API Key 输入）
@@ -46,31 +46,63 @@ narrative-harness/
 │   ├── dialogue_v2.md                # Stage 3: 对话生成模板
 │   └── choices_v2.md                 # Stage 4: 选择分支模板
 ├── config/                           # 配置文件
-│   ├── harness_config.yaml           # Pipeline 运行参数
+│   ├── quillforge_config.yaml         # Harness 运行参数
 │   ├── character_card_template.yaml  # 角色卡模板（10 字段）
 │   ├── worldline_template.yaml       # 世界线模板
 │   └── example_scene.yaml            # 示例场景（含预期输出）
 ├── src/                              # 源代码
-│   ├── server.py                     # FastAPI 后端（19 个 API 端点）
-│   ├── harness.py                    # Pipeline 引擎（5 阶段）
-│   ├── schemas.py                    # 数据模型（Character 10 字段）
+│   ├── server.py                     # FastAPI 后端（22 个 API 端点）
+│   ├── quillforge/                   # Harness 架构核心包
+│   │   ├── __init__.py
+│   │   ├── core.py                   # 薄编排器（组件组装 + 流程驱动 + 重试循环）
+│   │   ├── sut.py                    # SUT：LLM 客户端 + Prompt 模板加载/渲染
+│   │   ├── observer.py               # Observer 模式（Logging/SSE/Metrics）
+│   │   ├── fallback.py               # 三层保底策略
+│   │   ├── fixtures.py               # Fixture 系统（PreparedContext）
+│   │   └── stages/                   # 5 个可插拔 Stage
+│   │       ├── base.py               # StageBase 接口
+│   │       ├── context_assembly.py   # Stage 1: 上下文组装
+│   │       ├── narrative.py          # Stage 2: 叙事锚定（旁白流式生成）
+│   │       ├── dialogue.py           # Stage 3: 对话生成（流式 JSON 解析）
+│   │       ├── choices.py            # Stage 4: 选择分支（剧本选项优先）
+│   │       └── validation.py         # Stage 5: 验证门控
+│   ├── schemas.py                    # 数据模型（Character 10 字段 / HarnessInput / Output）
 │   ├── validator.py                  # 验证器（8 项检查）
-│   ├── generic_adapter.py            # 通用剧本适配器（扁平/嵌套结构）
-│   └── echo_adapter.py              # 回响-DEMO 专用适配器
+│   ├── image_gen.py                  # 生图模块（OpenAI 兼容协议 + 磁盘缓存 + 按需生图）
+│   ├── script_generator.py           # AI 剧本生成器（一句话 → 完整剧本包）
+│   ├── generic_adapter.py            # 通用剧本适配器（模糊匹配 + 多格式 + unlock_conditions 过滤）
+│   ├── realtime_engine.py           # AI 实时生成管线
+│   ├── tts_gen.py                    # TTS 语音合成
+│   └── static/                       # 前端页面
+│       ├── index.html                # Galgame VN 主界面
+│       └── game.html                 # 互动剧场页面
+├── test_samples.py                   # 内置剧本一致性测试
 └── tests/                            # 测试套件
     ├── test_acceptance.py            # 验收测试
-    ├── test_echo_e2e.py              # 回响-DEMO 专项测试（67 项）
-    ├── test_e2e_full.py              # 全链路三层验证（96 项）
-    └── TEST_REPORT.md                # 测试报告（167/167 PASS）
+    ├── test_echo_e2e.py              # 回响-DEMO 专项测试
+    └── test_e2e_full.py              # 全链路三层验证
 ```
 
-## Pipeline 架构
+# Harness 架构
+
+QuillForge 采用真正的 Harness 架构，核心特征：
+
+| 特征 | 说明 |
+|------|------|
+| **SUT 隔离** | LLM 客户端 + Prompt 渲染封装为 `NarrativeSUT`，可整体替换 |
+| **可插拔 Stage** | 5 个阶段实现 `StageBase` 接口，可替换、重排、新增 |
+| **Observer 模式** | 事件发射与执行逻辑解耦，支持 Logging/SSE/Metrics 观察者 |
+| **Fixture 系统** | `PreparedContext` 管理前置准备与后置清理 |
+| **Fallback 策略** | 三层保底抽象为 `DialogueFallback` 策略，可替换 |
+| **薄编排器** | `Harness` 核心仅负责组装 + 驱动 + 重试 + 通知，不含业务逻辑 |
+
+### 5 阶段流水线
 
 ```
-输入 → [Stage 1: 上下文组装] → [Stage 2: 叙事锚定] → [Stage 3: 对话生成]
-     → [Stage 4: 选择分支] → [Stage 5: 验证门控] → 输出
-                                    ↑                    │
-                                    └── 验证失败重试 ────┘
+Fixture → [Stage 1: 上下文组装] → [Stage 2: 叙事锚定] → [Stage 3: 对话生成]
+        → [Stage 4: 选择分支] → [Stage 5: 验证门控] → Fixture teardown
+                                      ↑                    │
+                                      └── 验证失败重试 ────┘
 ```
 
 **三层保底机制**（确保对话 ≥ 3 轮）：
@@ -78,6 +110,17 @@ narrative-harness/
 ```
 Pipeline 重试（最多 2 次）→ 简化 prompt 重试 → 硬编码保底（不依赖 LLM）
 ```
+
+### 选择驱动叙事机制
+
+玩家选择通过以下机制影响后续剧情发展：
+
+| 机制 | 说明 |
+|------|------|
+| **完整选择历史注入** | 玩家在每个场景的选择文本 + 后果（consequences）通过 `{{choiceHistory}}` 注入到旁白和对话的 prompt 中，LLM 据此体现选择路径的累积影响 |
+| **选项 ID 保存** | `choose()` 保存 `option_id` 到历史记录，用于 `unlock_conditions` 精确匹配 |
+| **unlock_conditions 过滤** | 隐藏选项仅在满足前置条件时展示（如"在 scene_01 选择 investigate 且在 scene_02 选择 continue"才解锁 hidden 选项） |
+| **结局匹配** | 最终结局根据完整选择历史通过关键词同义词匹配 |
 
 ## API 端点总览
 
@@ -93,7 +136,7 @@ Pipeline 重试（最多 2 次）→ 简化 prompt 重试 → 硬编码保底（
 | 轻量 | `POST /api/scene` | 生成/续写场景 |
 | 前端 | `GET /play` | 互动剧情 Web 界面 |
 
-> 完整 19 个端点详见 [narrative-harness.md](narrative-harness/narrative-harness.md) 技术规格文档。
+> 完整 22 个端点详见 [API 接口文档](docs/API接口文档.md)。
 
 ## 输入/输出示例
 
@@ -170,9 +213,13 @@ Pipeline 重试（最多 2 次）→ 简化 prompt 重试 → 硬编码保底（
 
 ## 续写机制
 
-将上一轮输出作为 `previousContext` 传入即可实现连续叙事：
+将上一轮输出作为 `previousContext` 传入即可实现连续叙事，同时传入 `choice_history` 以让 LLM 感知完整选择路径：
 
 ```python
+from quillforge.core import create_default_harness
+
+harness = create_default_harness()
+
 # 第 1 轮
 result_1 = harness.run({"currentScene": "...", "characters": [...], "worldline": "..."})
 
@@ -182,14 +229,15 @@ result_2 = harness.run({
     "characters": [...],
     "worldline": "...",
     "playerChoice": "选项A的描述",
-    "previousContext": result_1["data"]
+    "previousContext": result_1["data"],
+    "_choiceHistory": "场景1：选择了「选项A」— 后果：..."
 })
 ```
 
 ## 支持的 LLM
 
 兼容所有 OpenAI API 格式的服务：OpenAI、Azure OpenAI、Ollama、vLLM、DeepSeek、Moonshot 等。
-在 `config/harness_config.yaml` 中配置 `apiBase` 和 `model` 即可。
+在 `config/quillforge_config.yaml` 中配置 `apiBase` 和 `model` 即可。
 
 ## 环境变量
 
@@ -199,3 +247,14 @@ result_2 = harness.run({
 | `DEEPSEEK_MODEL` | 模型名称（默认 deepseek-chat） |
 | `DEEPSEEK_BASE_URL` | API 地址（默认 https://api.deepseek.com） |
 | `OPENAI_API_KEY` | 通用 OpenAI 兼容 API Key（优先级高于 DEEPSEEK） |
+| `IMAGE_API_KEY` | 生图 API Key（不配置则禁用生图，走纯缓存/占位模式） |
+| `IMAGE_BASE_URL` | 生图 API 地址 |
+| `IMAGE_MODEL` | 生图模型（默认 seedream-5.0-lite） |
+| `IMAGE_SIZE_BG` | 背景尺寸（默认 2560x1440） |
+| `IMAGE_SIZE_CHAR` | 立绘尺寸（默认 1440x2560） |
+| `IMAGE_CONCURRENCY` | 生图并发数（默认 6，推荐 9） |
+| `IMAGE_BG_PRELOAD_COUNT` | 开局预加载场景数（默认 2） |
+
+## 内置示例剧本
+
+回响-DEMO、守夜人、晚风知我意、暗香浮沉、霍格沃兹的阴影、一条狗的使命、铁衣照雪、除夕的警铃、鎏金囚笼、晚风信箱、狗生重启、蔷薇刺、将军的第二次性命

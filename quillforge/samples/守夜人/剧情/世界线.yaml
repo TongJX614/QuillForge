@@ -1,0 +1,121 @@
+# 世界线设定
+# 定义多线叙事的分支逻辑
+
+world_lines:
+  # ============================================================
+  # 主线世界线
+  # ============================================================
+  - id: "main_line"
+    name: "主线"
+    description: "沈夜完成守夜并面对封印的基础路线"
+
+    path:
+      - scene_id: "scene_01"
+        sequence: 1
+        description: "沈夜回到棺木岭，开始守夜"
+      - scene_id: "scene_02"
+        sequence: 2
+        description: "七夜守灵，异象逐夜升级"
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "第七夜，进入古井面对'夜啼'"
+      - scene_id: "scene_04"
+        sequence: 4
+        description: "走向结局"
+
+    key_choices:
+      - "choice_01"
+      - "choice_02"
+      - "choice_03"
+
+    end_ending: "ending_02"
+
+  # ============================================================
+  # 分支世界线A：继承线
+  # ============================================================
+  - id: "branch_line_a"
+    name: "继承线"
+    description: "沈夜选择继承祖母的宿命，成为新的引魂人"
+
+    origin_scene: "scene_02"
+    conditions:
+      - type: "choice_made"
+        value: "在scene_02选择inherit"
+
+    path:
+      - scene_id: "scene_02"
+        sequence: 2
+        description: "沈夜选择学习引魂术，准备继承"
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "沈夜以引魂人身份进入古井"
+      - scene_id: "scene_04"
+        sequence: 4
+        description: "走向结局"
+
+    consequences: "沈夜获得引魂人的力量，但永远被束缚在棺木岭"
+
+    end_ending: "ending_01"
+
+  # ============================================================
+  # 分支世界线B：破封线
+  # ============================================================
+  - id: "branch_line_b"
+    name: "破封线"
+    description: "沈夜选择打破封印，直面'夜啼'"
+
+    origin_scene: "scene_02"
+    conditions:
+      - type: "choice_made"
+        value: "在scene_02选择break_seal"
+
+    path:
+      - scene_id: "scene_02"
+        sequence: 2
+        description: "沈夜选择研究如何彻底解除封印"
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "沈夜主动打开古井封印"
+      - scene_id: "scene_04"
+        sequence: 4
+        description: "走向结局"
+
+    consequences: "沈夜释放了'夜啼'，但获得了和解的可能"
+
+    end_ending: "ending_03"
+
+  # ============================================================
+  # 汇聚点
+  # ============================================================
+convergence_points:
+    - scene_id: "scene_03"
+      description: "无论选择哪条线，沈夜都会在第七夜进入古井"
+      required_conditions:
+        - "完成scene_02"
+
+    - scene_id: "scene_04"
+      description: "所有路线最终走向结局"
+      required_conditions:
+        - "完成scene_03"
+
+  # ============================================================
+  # 世界线规则
+  # ============================================================
+rules:
+  - rule_id: "rule_01"
+    name: "分支规则"
+    description: "玩家在scene_02的选择决定进入继承线还是破封线"
+    condition: "在scene_02做出选择"
+    effect: "进入对应的分支世界线"
+
+  - rule_id: "rule_02"
+    name: "汇聚规则"
+    description: "无论哪条线，scene_03和scene_04都会发生"
+    condition: "完成scene_02"
+    effect: "进入scene_03，但沈夜的状态和掌握的信息不同"
+
+  - rule_id: "rule_03"
+    name: "隐藏结局规则"
+    description: "要进入隐藏结局，需要在多个场景中做出特定选择"
+    condition: "在scene_02选择break_seal，且在scene_01选择forgive"
+    effect: "解锁scene_03的隐藏选项'和解'"

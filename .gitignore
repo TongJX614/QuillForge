@@ -31,17 +31,20 @@ htmlcov/
 .vercel-tmp/
 
 # 上传的剧本文件
-narrative-harness/uploads/
+quillforge/uploads/
+
+# 生成的图片
+quillforge/generated_images/
 
 # 截图和临时图片
 *.png
 !docs/*.png
 
 # 临时测试文件
-narrative-harness/_*.py
-narrative-harness/_*.json
-narrative-harness/_*.txt
-narrative-harness/tests/_*.json
+quillforge/_*.py
+quillforge/_*.json
+quillforge/_*.txt
+quillforge/tests/_*.json
 
 # OS
 .DS_Store

@@ -1,0 +1,167 @@
+# 关键选择
+# 定义影响世界线和结局的关键抉择点
+
+choices:
+  # ============================================================
+  # 选择1：面对祖母遗物的态度
+  # ============================================================
+  - id: "choice_01"
+    scene_id: "scene_01"
+    prompt: "你在祖母的遗物中发现了一本手记，封面写着'夜儿亲启'。你怎么做？"
+    description: "面对祖母留下的最后信息，你的第一反应是什么？"
+
+    options:
+      - id: "read_immediately"
+        text: "立刻翻开手记"
+        description: "你需要答案，现在就要"
+        consequences:
+          immediate: "你开始阅读手记，了解到引魂人的职责和守夜的规矩"
+          delayed: "你更快进入状态，但错过了消化情绪的时间"
+          stats_changes:
+            curiosity: +2
+            courage: +1
+        personality_impact: "展现你急切、直面问题的一面"
+        relationship_changes: []
+        leads_to_ending: null
+
+      - id: "forgive"
+        text: "先对着遗像说一声'婆婆，我回来了'"
+        description: "无论如何，她是你祖母，你欠她一句话"
+        consequences:
+          immediate: "你在祖母遗像前站了很久，十二年的怨恨和思念涌上来"
+          delayed: "你与祖母的'和解'为后续隐藏路径埋下伏笔"
+          stats_changes:
+            empathy: +2
+            emotional_stability: +1
+        personality_impact: "展现你柔软、愿意和解的一面"
+        relationship_changes:
+          - character: "grandmother_memory"
+            change: +2
+            reason: "你选择了原谅，这改变了你看待一切的方式"
+        leads_to_ending: null
+
+      - id: "refuse"
+        text: "把手记推到一边，你不想知道"
+        description: "你逃离了十二年，不是为了回来面对这些"
+        consequences:
+          immediate: "你拒绝阅读手记，但夜里祠堂的异象会迫使你改变主意"
+          delayed: "剧情仍会推进，但你会错过一些关键背景信息"
+          stats_changes:
+            avoidance: +2
+        personality_impact: "展现你逃避、自我保护的一面"
+        relationship_changes: []
+        leads_to_ending: "ending_01"
+
+  # ============================================================
+  # 选择2：守夜方式
+  # ============================================================
+  - id: "choice_02"
+    scene_id: "scene_02"
+    prompt: "第五夜，你读完了祖母手记的最后一页。上面写着：'夜儿，你可以选择继承，可以选择离开，也可以选择打开那扇门。但记住——它不是怪物，它只是太痛了。'你怎么办？"
+    description: "了解真相后，你的选择将决定后续走向"
+
+    options:
+      - id: "inherit"
+        text: "学习引魂术，继承祖母的位置"
+        description: "也许这就是你的命，你认了"
+        consequences:
+          immediate: "你按照手记中的方法开始练习引魂术，感受到一种奇异的平静"
+          delayed: "你获得了与'夜啼'沟通的能力，但也感受到封印的重量"
+          stats_changes:
+            duty: +3
+            freedom: -2
+        personality_impact: "展现你承担责任、接受宿命的一面"
+        relationship_changes:
+          - character: "grandmother_memory"
+            change: +1
+            reason: "你理解了祖母一生的选择"
+        leads_to_ending: "ending_01"
+
+      - id: "break_seal"
+        text: "研究如何彻底打破封印"
+        description: "三百年的痛苦不该继续，你要终结这一切"
+        consequences:
+          immediate: "你在手记中寻找破封的方法，发现需要'以声渡魂'"
+          delayed: "你开始准备第七夜的破封仪式，但风险未知"
+          stats_changes:
+            courage: +3
+            caution: -1
+        personality_impact: "展现你反抗命运、追求终结的一面"
+        relationship_changes:
+          - character: "shen_fugui"
+            change: -2
+            reason: "叔公得知你的计划后极度恐惧和反对"
+        leads_to_ending: "ending_03"
+
+      - id: "continue_watch"
+        text: "完成守夜，但不做任何承诺"
+        description: "你只想撑过这七天，然后离开"
+        consequences:
+          immediate: "你决定按部就班完成守夜仪式，不做多余的事"
+          delayed: "封印暂时稳固，但你内心知道这不是长久之计"
+          stats_changes:
+            self_preservation: +2
+            emotional_stability: +1
+        personality_impact: "展现你务实、保持距离的一面"
+        relationship_changes: []
+        leads_to_ending: "ending_02"
+
+  # ============================================================
+  # 选择3：第七夜的抉择
+  # ============================================================
+  - id: "choice_03"
+    scene_id: "scene_03"
+    prompt: "你站在古井边，井底传来祖母的声音：'夜儿，你来了。'黑暗中，你感到有什么东西在看着你。你怎么做？"
+    description: "面对封印下的存在，你的最终选择"
+
+    options:
+      - id: "seal_again"
+        text: "重新封印"
+        description: "按照祖母的方法，将封印重新加固"
+        consequences:
+          immediate: "你诵念引魂词，将镇物重新压回井底"
+          delayed: "封印稳固，但你成为了新的守夜人"
+          stats_changes:
+            duty: +3
+            freedom: -3
+        personality_impact: "展现你牺牲自我、维护秩序的一面"
+        relationship_changes:
+          - character: "grandmother_memory"
+            change: +2
+            reason: "你最终理解了祖母，走上了和她一样的路"
+        leads_to_ending: "ending_01"
+
+      - id: "negotiate"
+        text: "与它对话"
+        description: "祖母说它不是怪物，你想试试"
+        consequences:
+          immediate: "你坐在井边，像祖母生前那样，开始和黑暗说话"
+          delayed: "你找到了共存的方式，但需要定期回来"
+          stats_changes:
+            empathy: +2
+            wisdom: +2
+        personality_impact: "展现你寻求理解、不走极端的一面"
+        relationship_changes:
+          - character: "grandmother_memory"
+            change: +1
+            reason: "你用祖母教你的方式，找到了自己的答案"
+        leads_to_ending: "ending_02"
+
+      - id: "release"
+        text: "打开封印，释放它"
+        description: "三百年的痛苦该结束了（需要满足隐藏条件）"
+        consequences:
+          immediate: "你打碎镇物，三百年的怨念倾泻而出"
+          delayed: "你念出每一个名字，用声音超度所有亡魂"
+          stats_changes:
+            courage: +3
+            empathy: +3
+        personality_impact: "展现你彻底反抗、以温柔对抗恐惧的一面"
+        relationship_changes:
+          - character: "grandmother_memory"
+            change: +3
+            reason: "你完成了祖母想做却不敢做的事"
+        leads_to_ending: "ending_03"
+        unlock_conditions:
+          - "在scene_01选择forgive"
+          - "在scene_02选择break_seal"

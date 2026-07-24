@@ -1,0 +1,20 @@
+main_plot:
+  summary: 退休刑警陈建国除夕帮女儿看店，年轻女警杨小璐上门求助——一个男孩在庙会走失。老陈凭经验锁定超市保安孙大勇，最终在烟花燃放前救回孩子，也找回了自己作为警察的初心。
+  themes:
+  - 正义不会退休
+  - 陌生人之间的信任与协作
+  - 春节的团圆与守护
+  core_conflict: 退休警察应否介入案件？老陈的私人生活与警察天职之间的拉扯，与杨小璐的侦查经验差异也构成张力。
+  stages:
+  - name: 除夕的警铃
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 庙会入口的承诺
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

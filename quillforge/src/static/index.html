@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuillForge — 通用文本生成引擎</title>
+<style>
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--accent:#3b82f6;--accent2:#8b5cf6;--text:#e2e8f0;--muted:#94a3b8;--danger:#ef4444;--success:#22c55e;--warn:#f59e0b}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+.header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:18px;font-weight:600;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .meta{font-size:13px;color:var(--muted)}
+.container{max-width:900px;margin:0 auto;padding:24px}
+
+/* Upload Section */
+.upload-section{margin-bottom:32px}
+.upload-section h2{font-size:22px;margin-bottom:16px}
+.upload-zone{border:2px dashed var(--border);border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:20px}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.upload-zone .icon{font-size:40px;margin-bottom:12px;opacity:.5}
+.upload-zone p{color:var(--muted);font-size:14px}
+.upload-zone .hint{font-size:12px;color:var(--muted);margin-top:8px;opacity:.6}
+.file-input{display:none}
+
+/* Sample Cards */
+.samples{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
+.sample-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .2s}
+.sample-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.sample-card.selected{border-color:var(--success);background:rgba(34,197,94,.08)}
+.sample-card .title{font-size:15px;font-weight:600;margin-bottom:4px}
+.sample-card .info{font-size:12px;color:var(--muted)}
+.sample-card .tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.sample-card .tag{font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(139,92,246,.15);color:var(--accent2)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-sm{padding:8px 16px;font-size:13px}
+
+/* Script Preview */
+.preview{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.preview h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.preview .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.preview .item{font-size:13px}
+.preview .item .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.preview .item .val{margin-top:2px}
+.char-chips{display:flex;flex-wrap:wrap;gap:6px}
+.char-chip{font-size:12px;padding:4px 10px;border-radius:20px;background:rgba(59,130,246,.12);color:var(--accent)}
+
+/* 剧本详情弹窗 */
+.script-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;animation:modalOverlayIn .25s ease-out forwards}
+.script-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(460px,90vw);max-height:80vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.5);transform:translateY(-30px);opacity:0;animation:modalSlideIn .35s ease-out .05s forwards}
+@keyframes modalOverlayIn{to{opacity:1}}
+@keyframes modalSlideIn{to{opacity:1;transform:translateY(0)}}
+.script-modal .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.script-modal .modal-title{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px}
+.script-modal .modal-close{font-size:22px;color:var(--muted);cursor:pointer;background:none;border:none;padding:4px 8px;line-height:1;transition:color .2s}
+.script-modal .modal-close:hover{color:var(--danger)}
+.script-modal .modal-body{margin-bottom:24px}
+.script-modal .modal-actions{text-align:center}
+
+/* 粒子加载页（AI 生成中） */
+.vn-stage{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000;overflow:hidden}
+.vn-bg{position:absolute;inset:0;background-color:#000;background-size:cover;background-position:center;background-repeat:no-repeat;transition:background-color .5s}
+.particles-container{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
+.particle{position:absolute;bottom:-10px;border-radius:50%;background:rgba(255,255,255,.6);box-shadow:0 0 6px rgba(255,220,180,.4);animation:floatUp linear infinite}
+@keyframes floatUp{0%{transform:translateY(0) translateX(0);opacity:0}10%{opacity:var(--p-op,.5)}90%{opacity:var(--p-op,.5)}100%{transform:translateY(-105vh) translateX(var(--p-x,30px));opacity:0}}
+.asset-title-area{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:5;width:100%}
+.asset-script-name{font-size:clamp(28px,5vw,52px);font-weight:700;color:#fff;letter-spacing:2px;text-shadow:0 0 30px rgba(255,200,150,.4),0 0 60px rgba(180,120,200,.3);animation:titleReveal 1.2s ease-out both}
+.asset-script-subtitle{font-size:14px;color:rgba(255,255,255,.5);letter-spacing:6px;margin-top:12px;text-transform:uppercase;animation:fadeIn 1.5s ease-out .3s both}
+@keyframes titleReveal{0%{opacity:0;transform:scale(.92);filter:blur(8px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:scale(1)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.asset-progress-area{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);width:min(380px,72vw);z-index:5}
+.asset-progress-bar{height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin-bottom:10px}
+.asset-progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;transition:width .4s ease;position:relative;box-shadow:0 0 8px rgba(99,102,241,.5)}
+.asset-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);animation:shimmer 2s ease-in-out infinite}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.asset-progress-msg{font-size:12px;color:rgba(255,255,255,.6);text-align:center;letter-spacing:1px}
+
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;gap:12px;color:var(--muted)}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.section-label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>QuillForge</h1>
+  <div class="meta" id="headerMeta">通用文本生成引擎 v3.0</div>
+</div>
+
+<div class="container" id="app"></div>
+
+<script>
+const API = '';
+let currentScript = null;  // {script_id, summary}
+const app = document.getElementById('app');
+
+// ─── 首页 ─────────────────────────────────────
+
+async function showHomeScreen() {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div>加载内置剧本...</div>';
+  let samples = [];
+  try {
+    const res = await api('/api/samples');
+    samples = res.samples || [];
+  } catch(e) {
+    app.innerHTML = `
+      <div class="start-screen" style="text-align:center;padding:80px 24px">
+        <h2 style="font-size:24px;margin-bottom:12px">服务器未启动</h2>
+        <p style="color:var(--muted);margin-bottom:24px">请先双击 start_server.bat 启动服务，然后再刷新此页面。</p>
+        <p style="color:var(--muted);font-size:13px">服务地址: http://127.0.0.1:8765</p>
+      </div>`;
+    return;
+  }
+
+  const sampleCards = samples.map((s, idx) => `
+    <div class="sample-card" data-idx="${idx}" data-path="${s.path}">
+      <div class="title">${escapeHtml(s.title || s.filename)}</div>
+      <div class="info">${escapeHtml(s.worldline || '')} · ${s.total_scenes || 0} 个场景</div>
+      <div class="tags">${(s.characters||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>
+    </div>
+  `).join('');
+
+  app.innerHTML = `
+    <div class="upload-section">
+      <!-- AI 实时生成剧本（主区域） -->
+      <div style="text-align:center;padding:40px 0 32px">
+        <h2 style="font-size:28px;margin-bottom:8px;background:linear-gradient(135deg,var(--accent2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent">✨ AI 实时生成剧本</h2>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:28px">描述你想看的故事，AI 逐场景实时生成完整剧本</p>
+        <div style="max-width:680px;margin:0 auto">
+          <div style="position:relative">
+            <textarea id="aiPromptInput" rows="4" maxlength="150"
+              style="width:100%;padding:18px 20px;background:#1a1a24;border:2px solid var(--border);border-radius:14px;color:var(--text);font-size:16px;line-height:1.7;outline:none;transition:border-color .2s;resize:none;font-family:inherit;position:relative;z-index:1"
+              onfocus="this.style.borderColor='var(--accent2)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+            <div id="aiPlaceholder" style="position:absolute;top:0;left:0;right:0;padding:18px 20px;color:var(--muted);font-size:16px;line-height:1.7;pointer-events:none;z-index:2;white-space:pre-wrap;overflow:hidden;min-height:calc(1.7em * 4 + 36px)"></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+            <span id="charCount" style="font-size:12px;color:var(--muted)">0 / 150</span>
+            <button class="btn btn-primary" id="aiGenerateBtn" style="padding:14px 40px;font-size:16px">开始生成</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分隔线 -->
+      <div style="display:flex;align-items:center;gap:16px;margin:0 0 24px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">或选择其他方式</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+
+      <!-- 文件夹上传 -->
+      <div style="margin-bottom:20px">
+        <div class="upload-zone" id="dropFolderZone" style="padding:24px">
+          <div class="icon">📂</div>
+          <p>点击选择文件夹上传</p>
+          <p class="hint">保留子目录结构</p>
+        </div>
+      </div>
+      <input type="file" id="folderInput" class="file-input" webkitdirectory multiple>
+    </div>
+
+    <div class="section-label">已保存剧本</div>
+    <div class="samples" id="samplesList">${sampleCards || '<p style="color:var(--muted)">暂无剧本</p>'}</div>
+    <div id="scriptModalContainer"></div>
+  `;
+
+  // AI Generate
+  document.getElementById('aiGenerateBtn').addEventListener('click', () => startAiGenerate());
+  const promptInput = document.getElementById('aiPromptInput');
+  const charCount = document.getElementById('charCount');
+  const placeholderEl = document.getElementById('aiPlaceholder');
+
+  // ─── 打字机轮播 placeholder ───
+  const typewriterPrompts = [
+    '在哈利波特世界里学习魔法，最终面对伏地魔的抉择……',
+    '一个退休老刑警在春节前接到一桩陈年旧案的线索……',
+    '深夜的末班公交车上，乘客们一个接一个消失……',
+    '穿越到古代成为一名小宫女，卷入后宫暗斗……',
+    '末日废土中，两个幸存者护送一个免疫的孩子前往避难所……',
+    '在一艘星际飞船上醒来，发现船员全部失踪，只剩AI相伴……',
+    '大学宿舍里收到一封十年后的自己寄来的信……',
+    '一个小镇书店老板发现书架上的小说正在预言现实……',
+    '雨夜，独居女孩发现门外脚印每晚会离门更近一步……',
+    '穿越成三国时代的一名小卒，意外救下了一位名将……',
+    '在一座与世隔绝的小岛上，灯塔守护人发现了漂流瓶里的求救信……',
+    '一个失忆的人在口袋里找到一张写着今晚日期的演唱会门票……',
+  ];
+  let twIdx = 0, twPos = 0, twDeleting = false, twTimer = null;
+  function twStep() {
+    const full = typewriterPrompts[twIdx];
+    if (twDeleting) {
+      twPos--;
+      if (twPos <= 0) {
+        twDeleting = false;
+        twIdx = (twIdx + 1) % typewriterPrompts.length;
+        twTimer = setTimeout(twStep, 400); // 打完后停顿再切下一条
+        placeholderEl.textContent = '\u200b'; // 零宽空格占位，保持高度
+        return;
+      }
+      twTimer = setTimeout(twStep, 30); // 退格速度
+    } else {
+      twPos++;
+      if (twPos >= full.length) {
+        // 打完整条，停留后开始退格
+        twTimer = setTimeout(() => { twDeleting = true; twStep(); }, 2200);
+        placeholderEl.textContent = full;
+        return;
+      }
+      twTimer = setTimeout(twStep, 65); // 打字速度
+    }
+    placeholderEl.textContent = full.slice(0, twPos) + (twDeleting ? '' : '▌');
+  }
+  function twStart() {
+    if (twTimer) return;
+    twTimer = setTimeout(twStep, 500);
+  }
+  function twStop() {
+    if (twTimer) { clearTimeout(twTimer); twTimer = null; }
+  }
+  function twHide() {
+    twStop();
+    placeholderEl.style.display = 'none';
+  }
+  function twShow() {
+    if (promptInput.value.trim()) return; // 有内容时不显示
+    placeholderEl.style.display = '';
+    twDeleting = false;
+    twPos = 0;
+    twIdx = (twIdx + 1) % typewriterPrompts.length; // 切到下一条
+    twStart();
+  }
+  // 初始启动
+  placeholderEl.textContent = '\u200b';
+  twStart();
+  promptInput.addEventListener('focus', twHide);
+  promptInput.addEventListener('blur', twShow);
+  promptInput.addEventListener('input', () => {
+    charCount.textContent = `${promptInput.value.length} / 150`;
+    if (promptInput.value.trim()) twHide(); else twShow();
+  });
+  // Ctrl+Enter 提交（普通 Enter 换行）
+  promptInput.addEventListener('keydown', e => { if(e.key==='Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startAiGenerate(); } });
+
+  // Folder upload
+  const dfz = document.getElementById('dropFolderZone');
+  const folderIn = document.getElementById('folderInput');
+  dfz.addEventListener('click', () => folderIn.click());
+  folderIn.addEventListener('change', e => { if(e.target.files.length > 0) uploadFolder(e.target.files); });
+
+  // Sample card clicks — use event delegation
+  document.getElementById('samplesList').addEventListener('click', e => {
+    const card = e.target.closest('.sample-card');
+    if (!card) return;
+    document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    fetchSample(card.dataset.path);
+  });
+}
+
+async function fetchSample(path) {
+  try {
+    const res = await fetch('/api/upload-sample-path?path=' + encodeURIComponent(path), {method:'POST'});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    currentScript = data;
+    showPreview(data);
+  } catch(e) {
+    alert('加载失败: ' + e.message);
+  }
+}
+
+// ─── AI 实时生成：首页缓冲 SSE，拿到 session_id 后跳转到游戏页 ───
+async function startAiGenerate() {
+  const input = document.getElementById('aiPromptInput');
+  const btn = document.getElementById('aiGenerateBtn');
+  const prompt = input.value.trim();
+
+  if (!prompt) { input.focus(); return; }
+  if (prompt.length > 150) { alert('描述不能超过150字'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '生成中...';
+  input.disabled = true;
+
+  // 粒子加载页
+  let particlesHTML = '';
+  for (let i = 0; i < 25; i++) {
+    const size = 2 + Math.random() * 3;
+    const left = Math.random() * 100;
+    const dur = 8 + Math.random() * 14;
+    const delay = Math.random() * 20;
+    const op = 0.2 + Math.random() * 0.5;
+    const xDrift = (Math.random() - 0.5) * 80;
+    particlesHTML += `<span class="particle" style="left:${left}%;width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:-${delay}s;--p-op:${op};--p-x:${xDrift}px"></span>`;
+  }
+  app.innerHTML = `
+    <div class="vn-stage">
+      <div class="vn-bg" style="background:radial-gradient(ellipse at 50% 30%,#2a1840 0%,#150a25 50%,#0a0515 100%)"></div>
+      <div class="particles-container">${particlesHTML}</div>
+      <div class="asset-title-area">
+        <div class="asset-script-name" style="font-size:clamp(24px,4vw,40px)">AI 实时剧本生成</div>
+        <div class="asset-script-subtitle">${escapeHtml(prompt)}</div>
+      </div>
+      <div class="asset-progress-area" style="display:block">
+        <div class="asset-progress-bar"><div class="asset-progress-fill" id="aiProgressFill" style="width:0%"></div></div>
+        <div class="asset-progress-msg" id="aiProgressMsg">正在构思故事设定...</div>
+      </div>
+    </div>`;
+  const fillEl = () => document.getElementById('aiProgressFill');
+  const msgEl = () => document.getElementById('aiProgressMsg');
+
+  try {
+    const res = await fetch('/api/realtime/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let seed = null;
+    let firstScene = null;
+    let sessionId = null;
+    let ttsEvents = [];
+    let bgEvents = [];
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === 'progress') {
+              if (msgEl()) msgEl().textContent = evt.message || '生成中...';
+              if (fillEl()) fillEl().style.width = '40%';
+            } else if (evt.type === 'story_seed') {
+              seed = evt;
+              if (msgEl()) msgEl().textContent = `故事设定完成：《${evt.title}》`;
+              if (fillEl()) fillEl().style.width = '60%';
+            } else if (evt.type === 'scene') {
+              firstScene = evt;
+              if (fillEl()) fillEl().style.width = '100%';
+              if (msgEl()) msgEl().textContent = '开场场景已就绪...';
+            } else if (evt.type === 'done') {
+              sessionId = evt.session_id;
+            } else if (evt.type === 'error') {
+              throw new Error(evt.message || '生成失败');
+            } else if (evt.event === 'tts') {
+              ttsEvents.push(evt);
+            } else if (evt.event === 'asset_bg_ready') {
+              bgEvents.push(evt);
+            }
+          } catch(pe) {
+            if (pe.message && !pe.message.includes('JSON')) throw pe;
+          }
+        }
+      }
+    }
+
+    if (!firstScene || !sessionId) throw new Error('场景生成失败');
+
+    // 存储到 sessionStorage，跳转到游戏页
+    sessionStorage.setItem('game_ctx', JSON.stringify({
+      seed: seed,
+      firstScene: firstScene,
+      ttsEvents: ttsEvents,
+      bgEvents: bgEvents,
+    }));
+    location.href = `/game?sid=${sessionId}&mode=realtime`;
+
+  } catch(e) {
+    alert('剧本生成失败: ' + e.message);
+    showHomeScreen();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '开始生成';
+    input.disabled = false;
+  }
+}
+
+async function uploadFolder(files) {
+  try {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const res = await fetch('/api/upload-directory', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    currentScript = data;
+    showPreview(data);
+  } catch(e) {
+    alert('上传失败: ' + e.message);
+  }
+}
+
+function showPreview(data) {
+  const container = document.getElementById('scriptModalContainer');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="script-modal-overlay" id="scriptModalOverlay">
+      <div class="script-modal" id="scriptModal">
+        <div class="modal-header">
+          <div class="modal-title">📖 ${escapeHtml(data.title || '剧本')}</div>
+          <button class="modal-close" id="scriptModalClose">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="preview" style="margin-bottom:0;border:none;padding:0;background:none">
+            <div class="grid">
+              <div class="item">
+                <div class="label">角色</div>
+                <div class="val"><div class="char-chips">${(data.characters||[]).map(c=>`<span class="char-chip">${escapeHtml(c)}</span>`).join('')}</div></div>
+              </div>
+              <div class="item">
+                <div class="label">世界线</div>
+                <div class="val">${escapeHtml(data.worldline || '')}</div>
+              </div>
+              <div class="item">
+                <div class="label">场景数</div>
+                <div class="val">${data.total_scenes || 0}</div>
+              </div>
+              <div class="item">
+                <div class="label">世界书</div>
+                <div class="val">${data.has_worldbook ? '✓ 有' : '✗ 无'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="startBtn">开始生成</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('headerMeta').textContent = data.title || '';
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  const overlay = document.getElementById('scriptModalOverlay');
+  overlay.addEventListener('click', e => { if (e.target === overlay) container.innerHTML = ''; });
+  document.getElementById('scriptModalClose').addEventListener('click', () => { container.innerHTML = ''; });
+}
+
+// ─── 剧本管线：创建会话后跳转到游戏页 ───
+async function startGame() {
+  if (!currentScript) { alert('请先选择或上传剧本'); return; }
+
+  const startBtn = document.getElementById('startBtn');
+  if (startBtn) { startBtn.disabled = true; startBtn.textContent = '启动中...'; }
+
+  try {
+    const res = await api(`/api/start?script_id=${currentScript.script_id}`, {method:'POST'});
+    const sid = res.session_id;
+    // 存储剧本元数据供游戏页使用
+    sessionStorage.setItem('game_ctx', JSON.stringify({script: currentScript}));
+    // 跳转到游戏页
+    location.href = `/game?sid=${sid}&mode=script`;
+  } catch(e) {
+    alert('启动失败: ' + e.message);
+    if (startBtn) { startBtn.disabled = false; startBtn.textContent = '开始生成'; }
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(API+path, {headers:{'Content-Type':'application/json'},...opts});
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${res.status}`);}
+  return res.json();
+}
+
+showHomeScreen();
+</script>
+</body>
+</html>

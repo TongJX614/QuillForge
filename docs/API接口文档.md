@@ -1,6 +1,6 @@
-# Narrative Harness — API 接口文档
+# QuillForge — API 接口文档
 
-> 版本：4.0.0 | 基础地址：`http://localhost:8765` | Swagger 文档：`http://localhost:8765/docs`
+> 版本：5.0.0 | 最后更新：2026-07-24 | 基础地址：`http://localhost:8766` | Swagger 文档：`http://localhost:8766/docs`
 
 ---
 
@@ -32,6 +32,17 @@
 | **Session API** | 有状态会话，`/api/start` → `/generate` → `/choose` | 完整交互游戏流程 |
 | **轻量 API** | 无状态单次调用，`/api/story` + `/api/scene` | 快速集成、脚本调用 |
 | **便捷 API** | 一键操作，`/api/load-folder` + `/api/auto-run` | 批量生成、快速测试 |
+
+### 选择驱动叙事
+
+系统支持**选择驱动叙事**机制，玩家选择通过以下方式影响后续剧情：
+
+| 机制 | 说明 |
+|------|------|
+| **完整选择历史注入** | 玩家在每个场景的选择文本 + 后果（consequences）通过 `{{choiceHistory}}` 注入到旁白和对话的 prompt 中，LLM 据此体现选择路径的累积影响 |
+| **选项 ID 保存** | `choose()` 保存 `option_id` 到历史记录，用于 `unlock_conditions` 精确匹配 |
+| **unlock_conditions 过滤** | 隐藏选项仅在满足前置条件时展示（如“在 scene_01 选择 investigate 且在 scene_02 选择 continue”才解锁 hidden 选项） |
+| **结局匹配** | 最终结局根据完整选择历史通过关键词同义词匹配 |
 
 ---
 
@@ -230,7 +241,7 @@
 
 ### 3.6 GET `/api/session/{session_id}/assets-stream` — 预生成美术素材（SSE）
 
-游戏开始时一次性预生成全部角色立绘 + 场景背景，线程池并行执行。已缓存的图片直接复用（与是否配置 IMAGE_API_KEY 无关），未配置且无缓存时回退占位图。
+游戏开始时预生成角色立绘 + 场景背景，线程池并行执行。**按需生图**：仅为至少出现在一个场景 `characters_present` 中的角色生成立绘，未引用角色跳过。已缓存的图片直接复用，未配置且无缓存时回退占位图。分两阶段推送：Phase 1（前 N 场景背景 + 出场角色）完成后前端即可开始游戏，Phase 2 后台补充剩余素材。
 
 **响应**：`text/event-stream`，事件类型：
 
@@ -263,7 +274,14 @@
 }
 ```
 
+**处理逻辑**：
+1. 根据当前场景的选项列表查找选中项，提取 `option_id` 和 `consequences`
+2. 将选择信息（`scene_id`、`scene_name`、`option_id`、`player_choice`、`consequences`）保存到会话历史
+3. 自动推进到下一场景，调用 5 阶段 Pipeline 生成（注入 `choice_history` 到 prompt + 用于 `unlock_conditions` 过滤）
+
 **响应**：返回下一场景的 Pipeline 输出（同 `/generate`）
+
+> 选择历史中每条记录包含：`scene_id`、`scene_name`、`player_choice`、`option_id`、`consequences`，后续场景生成时注入到旁白/对话/选择 prompt 中影响 LLM 生成。
 
 ---
 
@@ -286,7 +304,7 @@
 
 ### 3.10 GET `/api/session/{session_id}/history` — 查看对话历史
 
-历史含每个场景的旁白、完整对话和玩家选择。
+历史含每个场景的旁白、完整对话和玩家选择（含 `option_id` 和 `consequences`）。
 
 **响应**：
 
@@ -296,10 +314,13 @@
     {
       "scene_index": 0,
       "scene_name": "迷雾降临",
+      "scene_id": "scene_01",
       "narration": "...",
       "dialogues": [...],
       "nextChoices": [...],
-      "player_choice": "询问陈阿婆墙里的秘密"
+      "player_choice": "询问陈阿婆墙里的秘密",
+      "option_id": "investigate",
+      "consequences": "你发现了墙中隐藏的物件"
     }
   ]
 }
@@ -356,6 +377,8 @@
 | `sceneIndex` | int | 是 | 场景索引（从 0 开始） |
 | `playerChoice` | string | 否 | 玩家上一步的选择 |
 | `previousDialogues` | Dialogue[] | 否 | 历史对话记录 |
+
+> **选择驱动**：Session API 的 `choose()` 会自动将完整选择历史（含 `option_id` + `consequences`）注入到后续场景的生成 prompt 中。轻量 API 需调用方自行传入 `playerChoice`。
 
 ```json
 {
@@ -507,11 +530,13 @@ const decoder = new TextDecoder();
 
 ```json
 {
-  "samples": []
+  "samples": [
+    {"id": "回响-DEMO", "filename": "回响-DEMO", "path": "...", "title": "回响", "total_scenes": 4, "characters": ["苏燃", "林晓", "杜未明"]}
+  ]
 }
 ```
 
-> 内置示例存放在 `samples/` 目录，当前已清空。
+> 内置示例存放在 `samples/` 目录，当前包含：回响-DEMO、守夜人、晚风知我意、暗香浮沉、霍格沃兹的阴影、一条狗的使徒。
 
 ---
 
@@ -568,7 +593,8 @@ const decoder = new TextDecoder();
 | Stage 1 | Context Assembly | 解析世界线节点、标注当前位置（annotatedWorldline）、推断紧张度 |
 | Stage 2 | Narrative Anchoring | LLM 生成 150-300 字场景旁白，含完整角色卡和世界线进度 |
 | Stage 3 | Dialogue Generation | LLM 生成 3-15 轮角色对话，遵循性格标签 + 说话风格 + 背景故事。内置三层保底机制确保对话 ≥ 3 轮 |
-| Stage 4 | Choice Branching | LLM 生成 2-4 个玩家选项，标注世界线影响类型。**若剧本已定义选项（`interactions[].options[]` 或 `critical_choice` 匹配），跳过 LLM 直接使用剧本选项** |
+| Stage 4 | Choice Branching | LLM 生成 2-4 个玩家选项，标注世界线影响类型。**若剧本已定义选项，跳过 LLM 直接使用剧本选项。** 选项提取优先级：`critical_choice→key_choices` > `branching_point.choice_id` > 顶层 `choices` > `interactions[].options[]`。随后对选项执行 `unlock_conditions` 过滤：隐藏选项仅在满足前置条件时展示（如“在 scene_01 选择 investigate”）。**选择历史通过 `{{choiceHistory}}` 注入 prompt** |
+| — | 选择驱动 | 玩家选择保存 `option_id` + `consequences` 到会话历史，后续场景生成时注入到 Stage 2/3/4 的 prompt 中，LLM 据此体现选择路径的累积影响 |
 | Stage 5 | Validation Gate | 8 项自动校验，失败自动重试（最多 3 次） |
 
 ### 验证器检查项
@@ -652,7 +678,8 @@ const decoder = new TextDecoder();
 | POST | `/api/start` | Session | 创建游戏会话 |
 | POST | `/api/session/{id}/generate` | Session | 生成当前场景（同步） |
 | POST | `/api/session/{id}/generate-stream` | Session | 流式生成场景（SSE 逐条推送） |
-| GET | `/api/session/{id}/assets-stream` | Session | 预生成美术素材（SSE 并行生图） |
+| GET | `/api/session/{id}/assets-stream` | Session | 预生成美术素材（SSE 按需生图） |
+| POST | `/api/generate-script` | 便捷 | AI 生成剧本（SSE 流式进度） |
 | GET | `/generated_images/{path}` | 资源 | 读取生成的背景/立绘图片 |
 | POST | `/api/session/{id}/choose` | Session | 提交玩家选择 |
 | GET | `/api/session/{id}/state` | Session | 查询会话状态 |

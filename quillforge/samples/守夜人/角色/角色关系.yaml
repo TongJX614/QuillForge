@@ -1,0 +1,128 @@
+# 角色关系
+# 定义角色之间的关系网络和动态变化规则
+
+# ============================================================
+# 关系定义
+# ============================================================
+relationships:
+  - source: "shen_ye"
+    target: "grandmother_memory"
+    type: "祖孙"
+    description: |
+      沈夜与祖母的关系是整个故事的情感核心。
+      六岁前的温暖记忆与六岁后的恐惧形成撕裂，
+      十二年的逃离既是恐惧也是愧疚。
+      通过手记，沈夜逐渐还原一个真实的祖母。
+    initial_level: 3
+    dynamic: true
+    development:
+      - trigger: "阅读手记，了解祖母的孤独一生"
+        change: "理解加深，怨恨消解，关系升至6"
+        scene: "scene_02"
+      - trigger: "在古井中听到祖母的声音"
+        change: "情感爆发，彻底和解，关系升至10"
+        scene: "scene_03"
+
+  - source: "shen_ye"
+    target: "shen_fugui"
+    type: "远亲"
+    description: |
+      沈福贵是沈夜与棺木岭之间唯一的活人纽带。
+      他的沉默和欲言又止既让沈夜烦躁，也让她感到被关心。
+      他是沈夜理解祖母的另一个窗口。
+    initial_level: 2
+    dynamic: true
+    development:
+      - trigger: "叔公透露祖母生前的习惯"
+        change: "信任建立，关系升至4"
+        scene: "scene_02"
+      - trigger: "沈夜选择打破封印，叔公恐惧反对"
+        change: "关系紧张，降至2"
+        scene: "scene_02"
+      - trigger: "无论选择什么，叔公都默默接受"
+        change: "沈夜感受到无条件的接纳，关系升至6"
+        scene: "scene_04"
+
+  - source: "grandmother_memory"
+    target: "shen_fugui"
+    type: "同村"
+    description: |
+      沈婆婆是沈福贵敬重了一辈子的人。
+      她的嘱托就是他的使命，即使他不完全理解。
+      他心疼她的孤独，却无力改变什么。
+    initial_level: 8
+    dynamic: false
+    development: []
+
+# ============================================================
+# 关系类型定义
+# ============================================================
+relationship_types:
+  - id: "family"
+    name: "祖孙"
+    description: "血脉相连的至亲，爱恨交织"
+    min_level: 0
+    max_level: 10
+
+  - id: "villager"
+    name: "同村"
+    description: "同村而居的乡亲，敬重与畏惧并存"
+    min_level: 0
+    max_level: 10
+
+  - id: "distant_relative"
+    name: "远亲"
+    description: "有血缘但不亲近的亲戚"
+    min_level: 0
+    max_level: 10
+
+  - id: "guardian"
+    name: "守护"
+    description: "引魂人与被守护者的关系"
+    min_level: 0
+    max_level: 10
+
+  - id: "stranger"
+    name: "陌生人"
+    description: "没有交集的个体"
+    min_level: 0
+    max_level: 10
+
+# ============================================================
+# 关系变化规则
+# ============================================================
+change_rules:
+  - rule_id: "understanding"
+    description: "通过手记了解祖母的过去时，理解加深"
+    condition: "阅读手记中的关键章节"
+    change: +2
+    max_level: 10
+    min_level: 0
+
+  - rule_id: "fear_response"
+    description: "面对恐惧时的选择影响与祖母记忆的共鸣"
+    condition: "在恐怖事件中做出勇敢选择"
+    change: +1
+    max_level: 10
+    min_level: 0
+
+  - rule_id: "trust_build"
+    description: "叔公透露信息时，信任逐步建立"
+    condition: "叔公主动分享信息"
+    change: +1
+    max_level: 10
+    min_level: 0
+
+  - rule_id: "conflict"
+    description: "做出与村民期望相反的选择时，关系紧张"
+    condition: "选择打破封印或离开"
+    change: -2
+    max_level: 10
+    min_level: 0
+
+  - rule_id: "acceptance"
+    description: "无论选择什么都被接纳时，关系升华"
+    condition: "结局阶段，叔公的无条件接纳"
+    change: +2
+    max_level: 10
+    min_level: 0
