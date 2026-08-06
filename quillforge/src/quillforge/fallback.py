@@ -12,12 +12,21 @@ Fallback 策略 — 三层保底机制
 
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Optional
 
+_SRC_DIR = str(Path(__file__).resolve().parent.parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from logger import get_logger
 from schemas import AssembledContext, Dialogue, HarnessState
 from .sut import NarrativeSUT
 from .stages.dialogue import DialogueStage
+
+logger = get_logger("harness.fallback")
 
 
 class FallbackStrategy(ABC):
@@ -29,8 +38,13 @@ class FallbackStrategy(ABC):
         ...
 
     @abstractmethod
-    def execute(self, ctx: AssembledContext, sut: NarrativeSUT, state: HarnessState) -> list[Dialogue]:
-        """执行保底策略，返回保底对话列表"""
+    def execute(self, ctx: AssembledContext, sut: NarrativeSUT, state: HarnessState,
+                min_required: int = 0) -> list[Dialogue]:
+        """执行保底策略，返回保底对话列表
+
+        Args:
+            min_required: 调用方要求的最低对话总数（子类应以此为目标生成）
+        """
         ...
 
 
@@ -43,15 +57,21 @@ class DialogueFallback(FallbackStrategy):
     Layer 3: 硬编码保底（轮流发言）
     """
 
-    def should_trigger(self, state: HarnessState) -> bool:
+    def should_trigger(self, state: HarnessState, min_required: int = 0) -> bool:
         """当对话数量不足最低要求时触发"""
-        # 需要从 input_data 获取 min_req，这里通过 state 间接判断
-        # 实际判断逻辑在 core.py 中执行，这里提供接口
-        return True  # 由 core.py 负责实际判断
+        return len(state.dialogues) < min_required
 
-    def execute(self, ctx: AssembledContext, sut: NarrativeSUT, state: HarnessState) -> list[Dialogue]:
-        """执行三层保底"""
-        min_count = len(state.dialogues)  # 最低要求由调用方通过 state 传入
+    def execute(self, ctx: AssembledContext, sut: NarrativeSUT, state: HarnessState,
+                min_required: int = 0) -> list[Dialogue]:
+        """执行三层保底
+
+        Args:
+            min_required: 调用方要求的最低对话总数。为 0 时回退到
+                当前已有对话数（向后兼容）。
+        """
+        # 以调用方要求的最低数为准，而非当前已有数，
+        # 否则 Layer 1 索要的轮数永远达不到要求，白白浪费 LLM 调用
+        min_count = max(min_required, len(state.dialogues), 1)
         if not ctx.active_characters:
             return []
 
@@ -63,14 +83,14 @@ class DialogueFallback(FallbackStrategy):
             if isinstance(raw, list):
                 dialogues = self._filter_dialogues(raw, ctx)
                 if len(dialogues) >= min_count:
-                    print(f"  [FALLBACK] LLM保底生成 {len(dialogues)} 轮对话")
+                    logger.info("  [FALLBACK] LLM保底生成 %d 轮对话", len(dialogues))
                     return dialogues
-                print(f"  [FALLBACK] LLM保底仅 {len(dialogues)} 轮，不足 {min_count}，启用硬编码保底")
+                logger.info("  [FALLBACK] LLM保底仅 %d 轮，不足 %d，启用硬编码保底", len(dialogues), min_count)
         except Exception as e:
-            print(f"  [FALLBACK] LLM保底异常: {e}，启用硬编码保底")
+            logger.warning("  [FALLBACK] LLM保底异常: %s，启用硬编码保底", e)
 
         # Layer 3: 硬编码保底
-        return self._hardcode_fallback(ctx, min_count)
+        return self.hardcode_fallback(ctx, min_count)
 
     def _llm_fallback(self, ctx: AssembledContext, sut: NarrativeSUT, narration: str, min_count: int) -> list:
         """LLM 极简 prompt 保底生成"""
@@ -113,10 +133,14 @@ class DialogueFallback(FallbackStrategy):
                     ))
         return dialogues
 
-    def _hardcode_fallback(self, ctx: AssembledContext, min_count: int) -> list[Dialogue]:
+    def hardcode_fallback(self, ctx: AssembledContext, min_count: int) -> list[Dialogue]:
         """硬编码保底：轮流发言，基于角色性格生成最小对话"""
         char_names = [c.name for c in ctx.active_characters]
-        print(f"  [FALLBACK] 硬编码保底：为 {char_names} 生成 {min_count} 轮对话")
+        if not char_names:
+            # 空角色列表时直接返回，避免下方取模除零崩溃
+            logger.warning("  [FALLBACK] 无可用角色，跳过硬编码保底")
+            return []
+        logger.info("  [FALLBACK] 硬编码保底：为 %s 生成 %d 轮对话", char_names, min_count)
         dialogues = []
         for i in range(min_count):
             speaker = char_names[i % len(char_names)]

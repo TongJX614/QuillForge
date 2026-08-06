@@ -3,93 +3,105 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QuillForge — 通用文本生成引擎</title>
+<link rel="preconnect" href="https://fonts.googleapis.cn">
+<link rel="preconnect" href="https://fonts.gstatic.cn" crossorigin>
+<link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>QuillForge — 叙事创作平台</title>
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--accent:#3b82f6;--accent2:#8b5cf6;--text:#e2e8f0;--muted:#94a3b8;--danger:#ef4444;--success:#22c55e;--warn:#f59e0b}
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
-.header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.header h1{font-size:18px;font-weight:600;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.header .meta{font-size:13px;color:var(--muted)}
-.container{max-width:900px;margin:0 auto;padding:24px}
+:root{--bg:#121318;--card:#181920;--card-hover:#1e1f26;--border:#242530;--border-hover:#2e2f3a;--accent:#c5a265;--accent-soft:rgba(197,162,101,.10);--accent2:#d4b87a;--text:#d1d5db;--text-strong:#ededee;--muted:#6e7378;--danger:#c5544d;--success:#6b9e7a;--warn:#c89968;--font-sans:'Noto Sans SC','Microsoft YaHei','PingFang SC',system-ui,sans-serif;--font-serif:'Noto Serif SC','SimSun','STSong',serif;--font-mono:'JetBrains Mono','Consolas',monospace}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--font-sans);background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.header{padding:14px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:.5px;font-family:var(--font-serif)}
+.header .meta{font-size:12px;color:var(--muted);letter-spacing:.3px;font-family:var(--font-mono)}
+.container{max-width:860px;margin:0 auto;padding:36px 24px}
 
 /* Upload Section */
-.upload-section{margin-bottom:32px}
-.upload-section h2{font-size:22px;margin-bottom:16px}
-.upload-zone{border:2px dashed var(--border);border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:20px}
-.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(59,130,246,.05)}
-.upload-zone .icon{font-size:40px;margin-bottom:12px;opacity:.5}
+.upload-section{margin-bottom:48px}
+.upload-section h2{font-size:22px;margin-bottom:16px;font-family:var(--font-serif)}
+.upload-zone{border:1px dashed var(--border-hover);border-radius:14px;padding:36px;text-align:center;cursor:pointer;transition:all .25s;margin-bottom:20px}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:var(--accent-soft)}
+.upload-zone .icon{font-size:28px;margin-bottom:12px;opacity:.4}
 .upload-zone p{color:var(--muted);font-size:14px}
-.upload-zone .hint{font-size:12px;color:var(--muted);margin-top:8px;opacity:.6}
+.upload-zone .hint{font-size:12px;color:var(--muted);margin-top:8px;opacity:.5}
 .file-input{display:none}
 
 /* Sample Cards */
-.samples{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
-.sample-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .2s}
-.sample-card:hover{border-color:var(--accent);transform:translateY(-2px)}
-.sample-card.selected{border-color:var(--success);background:rgba(34,197,94,.08)}
-.sample-card .title{font-size:15px;font-weight:600;margin-bottom:4px}
-.sample-card .info{font-size:12px;color:var(--muted)}
-.sample-card .tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.sample-card .tag{font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(139,92,246,.15);color:var(--accent2)}
+.samples{display:flex;flex-direction:column;gap:14px;margin-top:20px}
+.sample-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;cursor:pointer;transition:all .2s}
+.sample-card:hover{border-color:var(--border-hover);background:var(--card-hover);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.sample-card.selected{border-color:var(--success);background:rgba(107,158,122,.06)}
+.sample-card .title{font-size:16px;font-weight:600;margin-bottom:6px;color:var(--text-strong)}
+.sample-card .info{font-size:12px;color:var(--muted);margin-bottom:10px}
+.sample-card .tags{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:rgba(197,162,101,.4) transparent}
+.sample-card .tags::-webkit-scrollbar{height:5px}
+.sample-card .tags::-webkit-scrollbar-track{background:transparent}
+.sample-card .tags::-webkit-scrollbar-thumb{background:rgba(197,162,101,.35);border-radius:3px}
+.sample-card .tags::-webkit-scrollbar-thumb:hover{background:rgba(197,162,101,.55)}
+.sample-card .tag{font-size:11px;padding:3px 10px;border-radius:6px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;flex-shrink:0}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
-.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
-.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:var(--accent);color:#0a0b0e}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 4px 16px var(--accent-soft)}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
 .btn-sm{padding:8px 16px;font-size:13px}
 
 /* Script Preview */
 .preview{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
-.preview h3{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.preview .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.preview .item{font-size:13px}
-.preview .item .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-.preview .item .val{margin-top:2px}
+.preview h3{font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text-strong)}
+.preview .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 24px}
+.preview .item{font-size:14px}
+.preview .item .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.preview .item .val{margin-top:4px;color:var(--text);line-height:1.7}
 .char-chips{display:flex;flex-wrap:wrap;gap:6px}
-.char-chip{font-size:12px;padding:4px 10px;border-radius:20px;background:rgba(59,130,246,.12);color:var(--accent)}
+.char-chip{font-size:12px;padding:4px 10px;border-radius:6px;background:var(--accent-soft);color:var(--accent)}
 
 /* 剧本详情弹窗 */
-.script-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;animation:modalOverlayIn .25s ease-out forwards}
-.script-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(460px,90vw);max-height:80vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.5);transform:translateY(-30px);opacity:0;animation:modalSlideIn .35s ease-out .05s forwards}
+.script-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;animation:modalOverlayIn .25s ease-out forwards}
+.script-modal-wrap{display:flex;flex-direction:column;align-items:center;gap:20px;width:min(640px,92vw);max-height:88vh}
+.script-modal{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:36px 40px;width:100%;max-height:calc(88vh - 80px);overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.4);transform:translateY(-20px);opacity:0;animation:modalSlideIn .35s ease-out .05s forwards;scrollbar-width:thin;scrollbar-color:rgba(197,162,101,.4) transparent}
+.script-modal::-webkit-scrollbar{width:6px}
+.script-modal::-webkit-scrollbar-track{background:transparent}
+.script-modal::-webkit-scrollbar-thumb{background:rgba(197,162,101,.35);border-radius:3px}
+.script-modal::-webkit-scrollbar-thumb:hover{background:rgba(197,162,101,.55)}
 @keyframes modalOverlayIn{to{opacity:1}}
 @keyframes modalSlideIn{to{opacity:1;transform:translateY(0)}}
-.script-modal .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
-.script-modal .modal-title{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px}
-.script-modal .modal-close{font-size:22px;color:var(--muted);cursor:pointer;background:none;border:none;padding:4px 8px;line-height:1;transition:color .2s}
+.script-modal .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.script-modal .modal-title{font-size:20px;font-weight:600;color:var(--text-strong);display:flex;align-items:center;gap:8px}
+.script-modal .modal-close{font-size:20px;color:var(--muted);cursor:pointer;background:none;border:none;padding:4px 8px;line-height:1;transition:color .2s}
 .script-modal .modal-close:hover{color:var(--danger)}
-.script-modal .modal-body{margin-bottom:24px}
-.script-modal .modal-actions{text-align:center}
+.script-modal .modal-body{margin-bottom:32px}
+.modal-actions-outer{display:flex;gap:12px;justify-content:center;opacity:0;animation:modalSlideIn .35s ease-out .12s forwards}
 
-/* 粒子加载页（AI 生成中） */
+/* 粒子加载页 */
 .vn-stage{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000;overflow:hidden}
-.vn-bg{position:absolute;inset:0;background-color:#000;background-size:cover;background-position:center;background-repeat:no-repeat;transition:background-color .5s}
+.vn-bg{position:absolute;inset:0;background-color:#0c0d11;background-size:cover;background-position:center;background-repeat:no-repeat;transition:background-color .5s}
 .particles-container{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
-.particle{position:absolute;bottom:-10px;border-radius:50%;background:rgba(255,255,255,.6);box-shadow:0 0 6px rgba(255,220,180,.4);animation:floatUp linear infinite}
+.particle{position:absolute;bottom:-10px;border-radius:50%;background:rgba(197,162,101,.3);box-shadow:0 0 8px rgba(197,162,101,.15);animation:floatUp linear infinite}
 @keyframes floatUp{0%{transform:translateY(0) translateX(0);opacity:0}10%{opacity:var(--p-op,.5)}90%{opacity:var(--p-op,.5)}100%{transform:translateY(-105vh) translateX(var(--p-x,30px));opacity:0}}
 .asset-title-area{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:5;width:100%}
-.asset-script-name{font-size:clamp(28px,5vw,52px);font-weight:700;color:#fff;letter-spacing:2px;text-shadow:0 0 30px rgba(255,200,150,.4),0 0 60px rgba(180,120,200,.3);animation:titleReveal 1.2s ease-out both}
-.asset-script-subtitle{font-size:14px;color:rgba(255,255,255,.5);letter-spacing:6px;margin-top:12px;text-transform:uppercase;animation:fadeIn 1.5s ease-out .3s both}
-@keyframes titleReveal{0%{opacity:0;transform:scale(.92);filter:blur(8px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:scale(1)}}
+.asset-script-name{font-size:clamp(26px,4.5vw,46px);font-weight:600;color:#ededee;letter-spacing:3px;text-shadow:0 0 40px rgba(197,162,101,.12);animation:titleReveal 1.2s ease-out both}
+.asset-script-subtitle{font-size:13px;color:rgba(255,255,255,.45);letter-spacing:4px;margin-top:14px;text-transform:uppercase;animation:fadeIn 1.5s ease-out .3s both}
+@keyframes titleReveal{0%{opacity:0;transform:scale(.94);filter:blur(6px)}60%{opacity:1;filter:blur(0)}100%{opacity:1;transform:scale(1)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.asset-progress-area{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);width:min(380px,72vw);z-index:5}
-.asset-progress-bar{height:4px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin-bottom:10px}
-.asset-progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;transition:width .4s ease;position:relative;box-shadow:0 0 8px rgba(99,102,241,.5)}
-.asset-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);animation:shimmer 2s ease-in-out infinite}
+.asset-progress-area{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);width:min(360px,72vw);z-index:5}
+.asset-progress-bar{height:3px;background:rgba(255,255,255,.10);border-radius:2px;overflow:hidden;margin-bottom:10px}
+.asset-progress-fill{height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width .4s ease;position:relative;box-shadow:0 0 6px rgba(197,162,101,.25)}
+.asset-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:shimmer 2s ease-in-out infinite}
 @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.asset-progress-msg{font-size:12px;color:rgba(255,255,255,.6);text-align:center;letter-spacing:1px}
+.asset-progress-msg{font-size:12px;color:rgba(255,255,255,.55);text-align:center;letter-spacing:1px}
 
 .loading{display:flex;align-items:center;justify-content:center;padding:40px;gap:12px;color:var(--muted)}
-.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.section-label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.section-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>QuillForge</h1>
-  <div class="meta" id="headerMeta">通用文本生成引擎 v3.0</div>
+  <div class="meta" id="headerMeta">QuillForge · v3.0</div>
 </div>
 
 <div class="container" id="app"></div>
@@ -118,8 +130,8 @@ async function showHomeScreen() {
   }
 
   const sampleCards = samples.map((s, idx) => `
-    <div class="sample-card" data-idx="${idx}" data-path="${s.path}">
-      <div class="title">${escapeHtml(s.title || s.filename)}</div>
+    <div class="sample-card" data-idx="${idx}" data-path="${s.path}" data-realtime="${s.is_realtime ? '1' : ''}">
+      <div class="title">${escapeHtml(s.title || s.filename)}${s.is_realtime ? '<span style="font-size:11px;padding:2px 6px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-left:8px;vertical-align:middle">实时</span>' : ''}</div>
       <div class="info">${escapeHtml(s.worldline || '')} · ${s.total_scenes || 0} 个场景</div>
       <div class="tags">${(s.characters||[]).map(c=>`<span class="tag">${escapeHtml(c)}</span>`).join('')}</div>
     </div>
@@ -128,34 +140,34 @@ async function showHomeScreen() {
   app.innerHTML = `
     <div class="upload-section">
       <!-- AI 实时生成剧本（主区域） -->
-      <div style="text-align:center;padding:40px 0 32px">
-        <h2 style="font-size:28px;margin-bottom:8px;background:linear-gradient(135deg,var(--accent2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent">✨ AI 实时生成剧本</h2>
-        <p style="color:var(--muted);font-size:14px;margin-bottom:28px">描述你想看的故事，AI 逐场景实时生成完整剧本</p>
+      <div style="text-align:center;padding:56px 0 36px">
+        <h2 style="font-size:30px;margin-bottom:10px;color:var(--text-strong);letter-spacing:1px;font-weight:600;font-family:var(--font-serif)">AI 实时生成剧本</h2>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:32px">输入故事描述，逐场景实时生成完整剧本</p>
         <div style="max-width:680px;margin:0 auto">
           <div style="position:relative">
             <textarea id="aiPromptInput" rows="4" maxlength="150"
-              style="width:100%;padding:18px 20px;background:#1a1a24;border:2px solid var(--border);border-radius:14px;color:var(--text);font-size:16px;line-height:1.7;outline:none;transition:border-color .2s;resize:none;font-family:inherit;position:relative;z-index:1"
+              style="width:100%;padding:18px 20px;background:var(--card);border:1px solid var(--border-hover);border-radius:12px;color:var(--text);font-size:15px;line-height:1.7;outline:none;transition:border-color .2s;resize:none;font-family:inherit;position:relative;z-index:1"
               onfocus="this.style.borderColor='var(--accent2)'" onblur="this.style.borderColor='var(--border)'"></textarea>
             <div id="aiPlaceholder" style="position:absolute;top:0;left:0;right:0;padding:18px 20px;color:var(--muted);font-size:16px;line-height:1.7;pointer-events:none;z-index:2;white-space:pre-wrap;overflow:hidden;min-height:calc(1.7em * 4 + 36px)"></div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
             <span id="charCount" style="font-size:12px;color:var(--muted)">0 / 150</span>
-            <button class="btn btn-primary" id="aiGenerateBtn" style="padding:14px 40px;font-size:16px">开始生成</button>
+            <button class="btn btn-primary" id="aiGenerateBtn" style="padding:14px 40px;font-size:15px">开始创作</button>
           </div>
         </div>
       </div>
 
       <!-- 分隔线 -->
-      <div style="display:flex;align-items:center;gap:16px;margin:0 0 24px">
+      <div style="display:flex;align-items:center;gap:16px;margin:0 0 28px">
         <div style="flex:1;height:1px;background:var(--border)"></div>
-        <span style="font-size:12px;color:var(--muted);white-space:nowrap">或选择其他方式</span>
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">或选择已有剧本</span>
         <div style="flex:1;height:1px;background:var(--border)"></div>
       </div>
 
       <!-- 文件夹上传 -->
-      <div style="margin-bottom:20px">
-        <div class="upload-zone" id="dropFolderZone" style="padding:24px">
-          <div class="icon">📂</div>
+      <div style="margin-bottom:24px">
+        <div class="upload-zone" id="dropFolderZone" style="padding:20px">
+          <div class="icon">⬡</div>
           <p>点击选择文件夹上传</p>
           <p class="hint">保留子目录结构</p>
         </div>
@@ -257,11 +269,11 @@ async function showHomeScreen() {
     if (!card) return;
     document.querySelectorAll('.sample-card').forEach(c => c.classList.remove('selected'));
     card.classList.add('selected');
-    fetchSample(card.dataset.path);
+    fetchSample(card.dataset.path, card.dataset.realtime === '1');
   });
 }
 
-async function fetchSample(path) {
+async function fetchSample(path, isRealtime) {
   try {
     const res = await fetch('/api/upload-sample-path?path=' + encodeURIComponent(path), {method:'POST'});
     if (!res.ok) {
@@ -270,6 +282,8 @@ async function fetchSample(path) {
     }
     const data = await res.json();
     if (data.detail) throw new Error(data.detail);
+    data.is_realtime = isRealtime;
+    data.path = path;
     currentScript = data;
     showPreview(data);
   } catch(e) {
@@ -287,7 +301,7 @@ async function startAiGenerate() {
   if (prompt.length > 150) { alert('描述不能超过150字'); return; }
 
   btn.disabled = true;
-  btn.textContent = '生成中...';
+  btn.textContent = '创作中...';
   input.disabled = true;
 
   // 粒子加载页
@@ -303,10 +317,10 @@ async function startAiGenerate() {
   }
   app.innerHTML = `
     <div class="vn-stage">
-      <div class="vn-bg" style="background:radial-gradient(ellipse at 50% 30%,#2a1840 0%,#150a25 50%,#0a0515 100%)"></div>
+      <div class="vn-bg" style="background:radial-gradient(ellipse at 50% 30%,#2e2820 0%,#1e1a14 50%,#141210 100%)"></div>
       <div class="particles-container">${particlesHTML}</div>
       <div class="asset-title-area">
-        <div class="asset-script-name" style="font-size:clamp(24px,4vw,40px)">AI 实时剧本生成</div>
+        <div class="asset-script-name" style="font-size:clamp(22px,3.5vw,36px);font-family:var(--font-serif)">正在生成剧本</div>
         <div class="asset-script-subtitle">${escapeHtml(prompt)}</div>
       </div>
       <div class="asset-progress-area" style="display:block">
@@ -318,10 +332,13 @@ async function startAiGenerate() {
   const msgEl = () => document.getElementById('aiProgressMsg');
 
   try {
+    const abortCtrl = new AbortController();
+    let noDataTimer = setTimeout(() => abortCtrl.abort(), 95000);
     const res = await fetch('/api/realtime/start', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({prompt}),
+      signal: abortCtrl.signal,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -340,6 +357,7 @@ async function startAiGenerate() {
     while (true) {
       const {done, value} = await reader.read();
       if (done) break;
+      clearTimeout(noDataTimer); noDataTimer = setTimeout(() => abortCtrl.abort(), 95000);
       buffer += decoder.decode(value, {stream: true});
       const lines = buffer.split('\n');
       buffer = lines.pop();
@@ -354,6 +372,19 @@ async function startAiGenerate() {
               seed = evt;
               if (msgEl()) msgEl().textContent = `故事设定完成：《${evt.title}》`;
               if (fillEl()) fillEl().style.width = '60%';
+            } else if (evt.type === 'scene_start') {
+              if (msgEl()) msgEl().textContent = '正在生成开场场景...';
+              if (fillEl()) fillEl().style.width = '70%';
+            } else if (evt.type === 'narration_delta') {
+              if (fillEl()) fillEl().style.width = '75%';
+            } else if (evt.type === 'narration') {
+              if (fillEl()) fillEl().style.width = '80%';
+            } else if (evt.type === 'dialogue') {
+              if (fillEl()) fillEl().style.width = '90%';
+            } else if (evt.type === 'scene_end') {
+              firstScene = evt;
+              if (fillEl()) fillEl().style.width = '100%';
+              if (msgEl()) msgEl().textContent = '开场场景已就绪...';
             } else if (evt.type === 'scene') {
               firstScene = evt;
               if (fillEl()) fillEl().style.width = '100%';
@@ -372,25 +403,38 @@ async function startAiGenerate() {
           }
         }
       }
+      // 首场景和会话ID均已获取，无需等待TTS/背景图任务完成即可跳转
+      if (firstScene && sessionId) break;
     }
 
     if (!firstScene || !sessionId) throw new Error('场景生成失败');
 
     // 存储到 sessionStorage，跳转到游戏页
-    sessionStorage.setItem('game_ctx', JSON.stringify({
-      seed: seed,
-      firstScene: firstScene,
-      ttsEvents: ttsEvents,
-      bgEvents: bgEvents,
-    }));
+    try {
+      sessionStorage.setItem('game_ctx', JSON.stringify({
+        seed: seed,
+        firstScene: firstScene,
+        ttsEvents: ttsEvents,
+        bgEvents: bgEvents,
+      }));
+    } catch(storageErr) {
+      // TTS base64 音频过大超出配额，丢弃音频重试
+      sessionStorage.setItem('game_ctx', JSON.stringify({
+        seed: seed,
+        firstScene: firstScene,
+        ttsEvents: [],
+        bgEvents: bgEvents,
+      }));
+    }
     location.href = `/game?sid=${sessionId}&mode=realtime`;
 
   } catch(e) {
-    alert('剧本生成失败: ' + e.message);
+    const msg = (e.name === 'AbortError') ? '请求超时，请重试' : e.message;
+    alert('剧本生成失败: ' + msg);
     showHomeScreen();
   } finally {
     btn.disabled = false;
-    btn.textContent = '开始生成';
+    btn.textContent = '开始创作';
     input.disabled = false;
   }
 }
@@ -418,40 +462,46 @@ function showPreview(data) {
   if (!container) return;
   container.innerHTML = `
     <div class="script-modal-overlay" id="scriptModalOverlay">
-      <div class="script-modal" id="scriptModal">
-        <div class="modal-header">
-          <div class="modal-title">📖 ${escapeHtml(data.title || '剧本')}</div>
-          <button class="modal-close" id="scriptModalClose">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="preview" style="margin-bottom:0;border:none;padding:0;background:none">
-            <div class="grid">
-              <div class="item">
-                <div class="label">角色</div>
-                <div class="val"><div class="char-chips">${(data.characters||[]).map(c=>`<span class="char-chip">${escapeHtml(c)}</span>`).join('')}</div></div>
-              </div>
-              <div class="item">
-                <div class="label">世界线</div>
-                <div class="val">${escapeHtml(data.worldline || '')}</div>
-              </div>
-              <div class="item">
-                <div class="label">场景数</div>
-                <div class="val">${data.total_scenes || 0}</div>
-              </div>
-              <div class="item">
-                <div class="label">世界书</div>
-                <div class="val">${data.has_worldbook ? '✓ 有' : '✗ 无'}</div>
+      <div class="script-modal-wrap">
+        <div class="script-modal" id="scriptModal">
+          <div class="modal-header">
+            <div class="modal-title">${escapeHtml(data.title || '剧本')}</div>
+            <button class="modal-close" id="scriptModalClose">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="preview" style="margin-bottom:0;border:none;padding:0;background:none">
+              <div class="grid">
+                <div class="item">
+                  <div class="label">角色</div>
+                  <div class="val"><div class="char-chips">${(data.characters||[]).map(c=>`<span class="char-chip">${escapeHtml(c)}</span>`).join('')}</div></div>
+                </div>
+                <div class="item">
+                  <div class="label">世界线</div>
+                  <div class="val">${escapeHtml(data.worldline || '')}</div>
+                </div>
+                <div class="item">
+                  <div class="label">场景数</div>
+                  <div class="val">${data.total_scenes || 0}</div>
+                </div>
+                <div class="item">
+                  <div class="label">世界书</div>
+                  <div class="val">${data.has_worldbook ? '✓ 有' : '✗ 无'}</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-primary" id="startBtn">开始生成</button>
+        <div class="modal-actions-outer">
+          <button class="btn btn-primary" id="startBtn">进入剧本</button>
+          ${data.is_realtime ? '<button class="btn" id="resumeBtn" style="background:var(--card);border:1px solid var(--accent);color:var(--accent)">继续生成</button>' : ''}
         </div>
       </div>
     </div>`;
   document.getElementById('headerMeta').textContent = data.title || '';
   document.getElementById('startBtn').addEventListener('click', startGame);
+  if (data.is_realtime) {
+    document.getElementById('resumeBtn').addEventListener('click', startGame);
+  }
   const overlay = document.getElementById('scriptModalOverlay');
   overlay.addEventListener('click', e => { if (e.target === overlay) container.innerHTML = ''; });
   document.getElementById('scriptModalClose').addEventListener('click', () => { container.innerHTML = ''; });
@@ -473,7 +523,7 @@ async function startGame() {
     location.href = `/game?sid=${sid}&mode=script`;
   } catch(e) {
     alert('启动失败: ' + e.message);
-    if (startBtn) { startBtn.disabled = false; startBtn.textContent = '开始生成'; }
+    if (startBtn) { startBtn.disabled = false; startBtn.textContent = '进入剧本'; }
   }
 }
 

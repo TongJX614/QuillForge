@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import uuid
 import yaml
 from pathlib import Path
@@ -21,8 +22,10 @@ from typing import Generator
 from datetime import date
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from openai import OpenAI
-from dotenv import load_dotenv
+from llm_client import LLMClient
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 # 项目路径
 PROJECT_ROOT = Path(__file__).resolve().parent.parent  # quillforge/
@@ -34,45 +37,24 @@ MAX_INPUT_LENGTH = 150
 
 
 # ═══════════════════════════════════════════════════════
-# LLM 客户端
+# LLM 客户端（使用统一模块）
 # ═══════════════════════════════════════════════════════
 
-def _build_client() -> tuple[OpenAI, str]:
-    """构建 DeepSeek 客户端，返回 (client, model_name)。
+def _build_script_gen_client() -> LLMClient:
+    """构建剧本生成专用 LLM 客户端。
 
     剧本生成使用轻量模型（flash），不受 .env 中 DEEPSEEK_MODEL 影响；
     可通过 SCRIPT_GEN_MODEL 环境变量覆盖，默认 deepseek-v4-flash。
     游戏运行时对话仍走 .env 配置的模型（如 v4-pro）。
     """
-    load_dotenv(WORKSPACE_ROOT / ".env")
-    load_dotenv(PROJECT_ROOT / ".env")
-
-    api_key = (
-        os.environ.get("DEEPSEEK_API_KEY")
-        or os.environ.get("OPENAI_API_KEY")
-        or ""
-    )
-    api_base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    # 剧本生成专用模型：优先读 SCRIPT_GEN_MODEL，默认用 flash 快速模型
     model = os.environ.get("SCRIPT_GEN_MODEL", "deepseek-v4-flash")
-
-    client = OpenAI(api_key=api_key, base_url=api_base)
-    return client, model
-
-
-def _llm_call(client: OpenAI, model: str, system: str, user: str,
-              max_tokens: int = 8000, temperature: float = 0.85) -> str:
-    """单次 LLM 调用"""
-    resp = client.chat.completions.create(
+    return LLMClient(
         model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
+        temperature=0.85,
+        max_tokens=8000,
+        timeout=120.0,
+        connect_timeout=10.0,
     )
-    return resp.choices[0].message.content or ""
 
 
 # ═══════════════════════════════════════════════════════
@@ -87,6 +69,8 @@ SYSTEM_PROMPT_STEP1A = """\
 - 目标游玩时长约25-30分钟（4个场景、2-3个结局）
 - 内容原创、有深度、有情感张力
 - 所有输出使用中文
+- 【内容安全】严禁设计涉及色情低俗、性暗示、暴力血腥、残忍虐待、政治敏感或其他违法违规的
+  世界观、规则和剧情；若用户输入包含此类内容，须转化为安全、中性的表达，不得扩展违规内容
 
 请严格按以下格式输出，不要添加任何额外说明：
 
@@ -105,12 +89,20 @@ SYSTEM_PROMPT_STEP1B = """\
 要求：
 - 角色数量 3-4 位
 - 角色设定要丰满，外貌描述要具体（用于AI生图）
+- 【物种真实性】角色外貌必须严格符合其物种/形态：若剧情设定角色是动物、妖怪、
+  机器人等非人类形态，appearance 必须描述该形态本身的特征（毛色、品种、体型、尾巴等），
+  严禁把非人类角色描写成人类外貌；species 字段填该形态（如“狗”），人类角色填 human
+- 角色设定必须具备高辨识度：每个角色的性格、说话风格、行为模式必须有明显区别，
+  确保在后续场景生成中角色行为保持一致——同一角色在不同场景中的性格、说话方式、
+  价值观不能前后矛盾
+- voice_tone 字段要具体描述说话风格（口头禅、语气习惯、用词偏好），确保可辨识
 - 所有输出使用中文
 
 请严格按以下格式输出，不要添加任何额外说明：
 
 ===FILE: 主要角色.yaml===
-（YAML格式，顶层键 characters，列表。每个角色包含：id, name, role, gender, age, occupation, background, personality, motivation, secrets, relationships, appearance, voice_tone, arc）
+（YAML格式，顶层键 characters，列表。每个角色包含：id, name, role, species, gender, age, occupation, background, personality, motivation, secrets, relationships, appearance, voice_tone, arc）
+species 字段填角色当前身体形态（human 或具体形态如狗/猫/机器人），用于AI生图时区分人形与非人形角色。
 注意：appearance 字段要详细描述外貌特征（身高体型、发型发色、标志性特征、穿着风格），这将直接用于AI生图。
 gender 字段必须填写 male 或 female，用于 TTS 语音合成时区分男女声。
 age 字段必须填写数字年龄（如 17、35、68），用于 TTS 语音合成时按年龄段（少年/青年/中年/老年）选择不同声线。
@@ -156,6 +148,9 @@ SYSTEM_PROMPT_STEP2B = """\
 要求：
 - 4个场景（scene_01~scene_04），每个场景有明确的叙事目的
 - 所有输出使用中文，内容精炼，避免冗长描述
+- 场景中的角色行为必须与角色设定一致：性格、说话风格、动机不能矛盾
+- 素材清单中场景背景的 details 字段只描述场景环境（地点/时间/天气/光影/建筑），
+  绝对不要描述任何人物——背景图只生成场景不生成人物
 
 请严格按以下格式输出，不要添加任何额外说明：
 
@@ -166,7 +161,8 @@ SYSTEM_PROMPT_STEP2B = """\
 ===FILE: 素材清单.yaml===
 （YAML格式，顶层键 assets，包含 visual 列表。visual 中必须包含：
 1. type="角色立绘" 条目（含 characters 子列表，每个角色有 name）
-2. type="场景背景" 条目（含 scenes 子列表，每个场景有 name/mood/details(1句话)，数量与场景数一致））
+2. type="场景背景" 条目（含 scenes 子列表，每个场景有 name/mood/details(1句话)，数量与场景数一致）
+   注意：details 只描述场景环境，不包含任何人物描述
 
 ===FILE: 事件清单.yaml===
 （YAML格式，顶层键 events，列表，2个事件即可。每个事件包含：id, name, type, description(1句), trigger_conditions, location, time, characters_involved, content(2-3句), choices(2个), rewards(1句)）
@@ -226,7 +222,8 @@ def _validate_yaml(content: str) -> bool:
     try:
         yaml.safe_load(content)
         return True
-    except Exception:
+    except Exception as e:
+        logger.debug("[script_gen] YAML 验证失败: %s", e)
         return False
 
 
@@ -242,7 +239,8 @@ def _fix_character_refs(step1: dict[str, str], step2: dict[str, str]) -> dict[st
     chars_yaml = step1.get("主要角色.yaml", "")
     try:
         chars_data = yaml.safe_load(chars_yaml)
-    except Exception:
+    except Exception as e:
+        logger.warning("[script_gen] 角色 YAML 解析失败，跳过引用校验: %s", e)
         return step2
     if not isinstance(chars_data, dict):
         return step2
@@ -272,7 +270,8 @@ def _fix_character_refs(step1: dict[str, str], step2: dict[str, str]) -> dict[st
     scenes_yaml = step2.get("场景清单.yaml", "")
     try:
         scenes_data = yaml.safe_load(scenes_yaml)
-    except Exception:
+    except Exception as e:
+        logger.warning("[script_gen] 场景 YAML 解析失败，跳过引用校验: %s", e)
         return step2
     if not isinstance(scenes_data, dict):
         return step2
@@ -360,35 +359,39 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
         yield {"type": "error", "message": f"描述不能超过{MAX_INPUT_LENGTH}字（当前{len(user_input)}字）"}
         return
 
-    client, model = _build_client()
+    _sg_client = _build_script_gen_client()
 
     # ─── Step 1: 基础设定（并行：世界+角色） ───
     yield {"type": "progress", "step": "foundation", "message": "正在并行构思世界观与角色..."}
 
     def _call_step1a():
         """Call A: 元数据 + 世界书"""
-        for attempt in range(max_retries + 1):
+        for attempt in range(max_retries):
             try:
-                raw = _llm_call(client, model, SYSTEM_PROMPT_STEP1A,
+                raw = _sg_client.generate(SYSTEM_PROMPT_STEP1A,
                                 f"用户想要的剧本：{user_input}", max_tokens=4000, temperature=0.85)
                 files = _parse_files_output(raw)
                 if "剧本元数据.yaml" in files and _validate_yaml(files["剧本元数据.yaml"]):
                     return files
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Step 1A attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+                if attempt < max_retries - 1:
+                    time.sleep(min(2 ** attempt, 10))
         return None
 
     def _call_step1b():
         """Call B: 角色 + 角色关系"""
-        for attempt in range(max_retries + 1):
+        for attempt in range(max_retries):
             try:
-                raw = _llm_call(client, model, SYSTEM_PROMPT_STEP1B,
+                raw = _sg_client.generate(SYSTEM_PROMPT_STEP1B,
                                 f"用户想要的剧本：{user_input}", max_tokens=6000, temperature=0.85)
                 files = _parse_files_output(raw)
                 if "主要角色.yaml" in files and _validate_yaml(files["主要角色.yaml"]):
                     return files
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Step 1B attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+                if attempt < max_retries - 1:
+                    time.sleep(min(2 ** attempt, 10))
         return None
 
     # 并行执行
@@ -427,29 +430,33 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
 
     def _call_step2a():
         """2A: 主线剧情 + 结局系统 + 世界线"""
-        for attempt in range(max_retries + 1):
+        for attempt in range(max_retries):
             try:
-                raw = _llm_call(client, model, SYSTEM_PROMPT_STEP2A,
+                raw = _sg_client.generate(SYSTEM_PROMPT_STEP2A,
                                 context_for_step2, max_tokens=5000, temperature=0.8)
                 files = _parse_files_output(raw)
                 if "结局系统.yaml" in files and _validate_yaml(files["结局系统.yaml"]):
                     if "主线剧情.yaml" in files and _validate_yaml(files["主线剧情.yaml"]):
                         return files
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Step 2A attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+                if attempt < max_retries - 1:
+                    time.sleep(min(2 ** attempt, 10))
         return None
 
     def _call_step2b():
         """2B: 场景清单 + 素材清单 + 事件清单"""
-        for attempt in range(max_retries + 1):
+        for attempt in range(max_retries):
             try:
-                raw = _llm_call(client, model, SYSTEM_PROMPT_STEP2B,
+                raw = _sg_client.generate(SYSTEM_PROMPT_STEP2B,
                                 context_for_step2, max_tokens=5000, temperature=0.8)
                 files = _parse_files_output(raw)
                 if "场景清单.yaml" in files and _validate_yaml(files["场景清单.yaml"]):
                     return files
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Step 2B attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+                if attempt < max_retries - 1:
+                    time.sleep(min(2 ** attempt, 10))
         return None
 
     # 2A + 2B 并行
@@ -480,20 +487,22 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
 """
 
     files_2c = None
-    for attempt in range(max_retries + 1):
+    for attempt in range(max_retries):
         try:
-            raw = _llm_call(client, model, SYSTEM_PROMPT_STEP2C,
+            raw = _sg_client.generate(SYSTEM_PROMPT_STEP2C,
                             context_for_step2c, max_tokens=3000, temperature=0.8)
             files = _parse_files_output(raw)
             if "关键选择.yaml" in files and _validate_yaml(files["关键选择.yaml"]):
                 files_2c = files
                 break
-            if attempt < max_retries:
-                yield {"type": "progress", "step": "choices", "message": "选项格式校验未通过，正在重新生成..."}
+            logger.warning("Step 2C attempt %d/%d: validation failed, retrying", attempt + 1, max_retries)
+            if attempt < max_retries - 1:
+                time.sleep(min(2 ** attempt, 10))
         except Exception as e:
-            if attempt < max_retries:
-                yield {"type": "progress", "step": "choices", "message": "生成遇到问题，正在重试..."}
-            else:
+            logger.warning("Step 2C attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+            if attempt < max_retries - 1:
+                time.sleep(min(2 ** attempt, 10))
+            if attempt >= max_retries - 1:
                 yield {"type": "error", "message": f"关键选择生成失败: {str(e)}"}
                 return
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Narrative Generation Harness — 数据模型定义
 定义 Pipeline 所有阶段的输入/输出数据结构
@@ -15,9 +16,9 @@ from typing import Any, Optional
 @dataclass
 class Character:
     """角色卡 — 完整字段"""
-    name: str
-    role: str
-    personality: str
+    name: str = ""
+    role: str = ""
+    personality: str = ""
     id: str = ""  # 角色ID（如 su_ran），用于 speaker 归一化
     speaking_style: str = ""
     background: str = ""
@@ -93,9 +94,9 @@ class PreviousContext:
 @dataclass
 class HarnessInput:
     """Pipeline 完整输入"""
-    current_scene: str
-    characters: list[Character]
-    worldline: str
+    current_scene: str = ""
+    characters: list[Character] = field(default_factory=list)
+    worldline: str = ""
     player_choice: str = ""
     previous_context: Optional[PreviousContext] = None
     options: GenerationOptions = field(default_factory=GenerationOptions)
@@ -158,14 +159,14 @@ class HarnessInput:
 @dataclass
 class AssembledContext:
     """Stage 1 输出：组装后的场景上下文"""
-    current_node: str
-    node_index: int
-    total_nodes: int
-    previous_node: str
-    next_node: str
-    worldline_progress: float
-    scene_description: str
-    active_characters: list[Character]
+    current_node: str = ""
+    node_index: int = 0
+    total_nodes: int = 0
+    previous_node: str = ""
+    next_node: str = ""
+    worldline_progress: float = 0.0
+    scene_description: str = ""
+    active_characters: list[Character] = field(default_factory=list)
     player_decision: str = ""
     tension: str = "medium"
     narrative_direction: str = ""
@@ -293,8 +294,8 @@ def _find_current_node(nodes: list[str], scene: str, prev_ctx: Optional[Previous
 @dataclass
 class Dialogue:
     """单条对话"""
-    speaker: str
-    text: str
+    speaker: str = ""
+    text: str = ""
     emotion: str = ""
 
     def to_dict(self) -> dict:
@@ -307,8 +308,8 @@ class Dialogue:
 @dataclass
 class Choice:
     """后续选择"""
-    text: str
-    effect: str
+    text: str = ""
+    effect: str = ""
     worldline_impact: str = "advance"
 
     def to_dict(self) -> dict:
@@ -322,8 +323,8 @@ class Choice:
 @dataclass
 class ValidationCheck:
     """单项验证结果"""
-    name: str
-    passed: bool
+    name: str = ""
+    passed: bool = False
     severity: str = "high"  # critical | high | medium
     detail: str = ""
     score: float = 0.0
@@ -332,8 +333,8 @@ class ValidationCheck:
 @dataclass
 class ValidationResult:
     """完整验证结果"""
-    passed: bool
-    checks: list[ValidationCheck]
+    passed: bool = False
+    checks: list[ValidationCheck] = field(default_factory=list)
     retry_count: int = 0
 
     def to_dict(self) -> dict:
@@ -356,12 +357,12 @@ class ValidationResult:
 @dataclass
 class HarnessOutput:
     """Pipeline 完整输出"""
-    success: bool
-    narration: str
-    dialogues: list[Dialogue]
-    next_choices: list[Choice]
-    worldline_state: dict
-    validation: ValidationResult
+    success: bool = False
+    narration: str = ""
+    dialogues: list[Dialogue] = field(default_factory=list)
+    next_choices: list[Choice] = field(default_factory=list)
+    worldline_state: dict = field(default_factory=dict)
+    validation: ValidationResult = field(default_factory=ValidationResult)
     metadata: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -385,10 +386,10 @@ class HarnessOutput:
 @dataclass
 class StageResult:
     """单个阶段的执行结果"""
-    stage_number: int
-    stage_name: str
-    success: bool
-    data: Any
+    stage_number: int = 0
+    stage_name: str = ""
+    success: bool = False
+    data: Any = None
     elapsed_ms: int = 0
 
 

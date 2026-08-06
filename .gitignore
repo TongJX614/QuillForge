@@ -19,6 +19,7 @@ env/
 # IDE
 .idea/
 .vscode/
+.qoder/
 *.swp
 *.swo
 
@@ -35,6 +36,9 @@ quillforge/uploads/
 
 # 生成的图片
 quillforge/generated_images/
+
+# 生成的音频
+quillforge/generated_audio/
 
 # 截图和临时图片
 *.png

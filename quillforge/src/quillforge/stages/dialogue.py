@@ -8,12 +8,22 @@ Stage 3: Dialogue Generation — 对话生成
 
 from __future__ import annotations
 
+import json
+import sys
+from pathlib import Path
 from typing import Generator
 
+_SRC_DIR = str(Path(__file__).resolve().parent.parent.parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from logger import get_logger
 from schemas import HarnessInput, AssembledContext, Dialogue
 from ..fixtures import PreparedContext
 from ..sut import NarrativeSUT
 from .base import StageBase
+
+logger = get_logger("stage.dialogue")
 
 
 class DialogueStage(StageBase):
@@ -41,8 +51,8 @@ class DialogueStage(StageBase):
 
         try:
             raw_dialogues = sut.call_json(ctx.rendered_system_prompt, user_prompt)
-        except (ValueError, Exception) as e:
-            print(f"  [DIALOGUE] LLM JSON 解析失败: {e}")
+        except (ValueError, json.JSONDecodeError, KeyError) as e:
+            logger.info("  [DIALOGUE] LLM JSON 解析失败: %s", e)
             return dialogues
 
         if isinstance(raw_dialogues, list):
@@ -56,16 +66,16 @@ class DialogueStage(StageBase):
                     speaker = speaker_map.get(speaker.lower(), speaker)
                     if speaker not in valid_speakers:
                         filtered_count += 1
-                        print(f"  [FILTER] 过滤 speaker: '{speaker}' (合法: {valid_speakers})")
+                        logger.debug("  [FILTER] 过滤 speaker: '%s' (合法: %s)", speaker, valid_speakers)
                         continue
                     dialogues.append(Dialogue(
                         speaker=speaker,
                         text=d.get("text", ""),
                         emotion=d.get("emotion", ""),
                     ))
-            print(f"  [DIALOGUE] LLM生成 {len(raw_dialogues)} 轮, 过滤 {filtered_count} 轮, 保留 {len(dialogues)} 轮")
+            logger.info("  [DIALOGUE] LLM生成 %d 轮, 过滤 %d 轮, 保留 %d 轮", len(raw_dialogues), filtered_count, len(dialogues))
         else:
-            print(f"  [DIALOGUE] LLM返回非列表类型: {type(raw_dialogues).__name__}")
+            logger.warning("  [DIALOGUE] LLM返回非列表类型: %s", type(raw_dialogues).__name__)
 
         return dialogues
 
@@ -111,7 +121,7 @@ class DialogueStage(StageBase):
 
             if speaker not in valid_speakers:
                 filtered_count += 1
-                print(f"  [FILTER] 过滤 speaker: '{speaker}' (合法: {valid_speakers})")
+                logger.debug("  [FILTER] 过滤 speaker: '%s' (合法: %s)", speaker, valid_speakers)
                 continue
             kept += 1
             dialogue = Dialogue(
@@ -122,7 +132,7 @@ class DialogueStage(StageBase):
             dialogues.append(dialogue)
             yield {"kind": "dialogue", "dialogue": dialogue}
 
-        print(f"  [DIALOGUE-STREAM] 对话 {kept} 轮, 动作旁白 {action_count} 条, 过滤 {filtered_count} 轮")
+        logger.info("  [DIALOGUE-STREAM] 对话 %d 轮, 动作旁白 %d 条, 过滤 %d 轮", kept, action_count, filtered_count)
         return dialogues
 
     def _build_prompt(
@@ -135,7 +145,8 @@ class DialogueStage(StageBase):
     ) -> str:
         """构建对话生成的 user prompt"""
         opts = inp.options
-        variables = {
+        variables = self._common_variables(extra)
+        variables.update({
             "narration": narration,
             "characters": assembled.active_characters,
             "annotatedWorldline": assembled.annotated_worldline,
@@ -143,28 +154,11 @@ class DialogueStage(StageBase):
             "nextNode": assembled.next_node or "（终局）",
             "worldlineProgress": int(assembled.worldline_progress * 100),
             "playerDecision": assembled.player_decision,
-            "choiceHistory": extra.get("_choiceHistory", ""),
             "dialogueCount": (opts.dialogue_count_min + opts.dialogue_count_max) // 2,
             "minDialogues": opts.dialogue_count_min,
             "maxDialogues": opts.dialogue_count_max,
             "previousDialogues": inp.previous_context.dialogues if inp.previous_context else [],
-            # 剧本全局上下文
-            "events": extra.get("_events", ""),
-            "stagesOverview": extra.get("_stagesOverview", ""),
-            "coreConflict": extra.get("_coreConflict", ""),
-            "relationshipNetwork": extra.get("_relationshipNetwork", ""),
-            "sceneDetails": extra.get("_sceneDetails", ""),
-            "worldlines": extra.get("_worldlines", ""),
-            "endings": extra.get("_endings", ""),
-            "keyChoices": extra.get("_keyChoices", ""),
-            "themes": extra.get("_themes", ""),
-            "worldbookRules": extra.get("_worldbook", ""),
-            "plotSummary": extra.get("_plotSummary", ""),
-            # 当前场景专属剧情上下文
-            "currentStageContext": extra.get("_currentStageContext", ""),
-            "sceneBeats": extra.get("_sceneBeats", ""),
-            "sceneHooks": extra.get("_sceneHooks", ""),
-        }
+        })
         return sut.render_template(sut.prompts["dialogue"], variables)
 
     @staticmethod

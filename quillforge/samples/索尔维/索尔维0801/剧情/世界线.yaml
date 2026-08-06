@@ -1,0 +1,216 @@
+# 世界线设定
+# 定义多线叙事的分支逻辑
+# 世界线数量不限，按剧情需要自由增减
+
+world_lines:
+  # 主线世界线（必有一条）
+  - id: "main_line"
+    name: "主线：索尔维的六天"
+    description: "玩家以记录员身份参加1927年第五届索尔维会议，见证爱因斯坦-玻尔论战，在两种世界观之间寻找自己的位置。"
+
+    path:
+      - scene_id: "scene_01"
+        sequence: 1
+        description: "抵达布鲁塞尔，与海森堡重逢"
+      - scene_id: "scene_02"
+        sequence: 2
+        description: "开幕前夜，与洛伦兹深谈"
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "会议第一天：三种诠释碰撞，爱因斯坦提出'超距作用'"
+      - scene_id: "scene_04"
+        sequence: 4
+        description: "公园散步：爱因斯坦、居里夫人与'月亮问题'"
+      - scene_id: "scene_05"
+        sequence: 5
+        description: "泡利击溃德布罗意的导航波理论"
+      - scene_id: "scene_06"
+        sequence: 6
+        description: "深夜钢琴：海森堡的困惑与成长"
+      - scene_id: "scene_07"
+        sequence: 7
+        description: "爱因斯坦的深夜告白：'鬼魅般的超距作用'"
+      - scene_id: "scene_08"
+        sequence: 8
+        description: "最后一日：合影与洛伦兹的告别"
+      - scene_id: "scene_09"
+        sequence: 9
+        description: "离别：火车上的最终选择"
+
+    key_choices:
+      - "choice_01"
+      - "choice_02"
+      - "choice_03"
+      - "choice_final"
+
+    end_ending: "ending_transcend"
+
+  # 分支世界线
+  - id: "branch_copenhagen"
+    name: "哥本哈根之路"
+    description: "玩家从一开始就倾向哥本哈根诠释，与海森堡、玻尔、泡利结盟，最终完全接受不确定性原理。"
+
+    origin_scene: "scene_03"
+    conditions:
+      - type: "choice_made"
+        value: "choice_01选择c01_a（走向哥本哈根阵营）"
+
+    path:
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "加入海森堡和泡利的讨论，获得'内部人'视角"
+      - scene_id: "scene_05"
+        sequence: 5
+        description: "与海森堡一起庆祝泡利的胜利"
+      - scene_id: "scene_06"
+        sequence: 6
+        description: "帮助海森堡理解玻尔的批评，成为'翻译者'"
+      - scene_id: "scene_07"
+        sequence: 7
+        description: "面对爱因斯坦的质疑，坚定捍卫哥本哈根立场"
+
+    consequences: "与海森堡友谊深化，但失去与爱因斯坦深度对话的机会；最终成为'正统派'物理学家"
+
+    end_ending: "ending_copenhagen"
+
+  - id: "branch_realism"
+    name: "实在论之路"
+    description: "玩家被爱因斯坦的魅力和实在论直觉吸引，选择与'旧神'站在一起，对抗主流。"
+
+    origin_scene: "scene_03"
+    conditions:
+      - type: "choice_made"
+        value: "choice_01选择c01_b（走向爱因斯坦阵营）"
+
+    path:
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "坐在爱因斯坦身边，近距离观察他的思维过程"
+      - scene_id: "scene_04"
+        sequence: 4
+        description: "公园散步中与爱因斯坦深度对话'月亮问题'"
+      - scene_id: "scene_05"
+        sequence: 5
+        description: "同情德布罗意的失败，与爱因斯坦一起安慰他"
+      - scene_id: "scene_07"
+        sequence: 7
+        description: "成为爱因斯坦'鬼魅超距作用'的第一个听众"
+
+    consequences: "与爱因斯坦建立深厚关系，但与海森堡友谊受损；最终成为'少数派'但保持独立"
+
+    end_ending: "ending_realism"
+
+  - id: "branch_third_way"
+    name: "第三条道路"
+    description: "玩家同情德布罗意的导航波理论，试图在两大阵营之外寻找可能。"
+
+    origin_scene: "scene_03"
+    conditions:
+      - type: "choice_made"
+        value: "choice_01选择c01_c（走向德布罗意）"
+
+    path:
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "与德布罗意讨论导航波，理解'确定性'的另一种可能"
+      - scene_id: "scene_05"
+        sequence: 5
+        description: "目睹泡利击溃导航波，坐在德布罗意身边"
+      - scene_id: "scene_07"
+        sequence: 7
+        description: "带着'第三条道路已死'的遗憾面对爱因斯坦"
+
+    consequences: "与德布罗意建立深厚友谊，见证'失败者'的尊严；最终理解'美的想法不会死'"
+
+    end_ending: "ending_de_broglie"
+
+  - id: "branch_observer"
+    name: "沉默的观察者"
+    description: "玩家选择不参与任何阵营，以纯粹的观察者身份度过六天。"
+
+    origin_scene: "scene_03"
+    conditions:
+      - type: "choice_made"
+        value: "choice_01选择c01_d（走向狄拉克/拒绝选边）"
+
+    path:
+      - scene_id: "scene_03"
+        sequence: 3
+        description: "与狄拉克一起沉默观察，获得'局外人'视角"
+      - scene_id: "scene_05"
+        sequence: 5
+        description: "以旁观者身份记录泡利的'审判'"
+      - scene_id: "scene_07"
+        sequence: 7
+        description: "面对爱因斯坦的追问，选择'我不知道'"
+
+    consequences: "保持完全独立，但可能错失深度关系；最终达到'超越'或陷入'空白'"
+
+    end_ending: "ending_transcend"
+
+  - id: "branch_lorentz"
+    name: "最后的守护者"
+    description: "玩家与洛伦兹建立深厚关系，关注'让对话成为可能的人'而非对话本身。"
+
+    origin_scene: "scene_02"
+    conditions:
+      - type: "choice_made"
+        value: "scene_02中选择关心洛伦兹健康的选项"
+
+    path:
+      - scene_id: "scene_02"
+        sequence: 2
+        description: "与洛伦兹的深夜长谈，了解他的'最后一次'"
+      - scene_id: "scene_04"
+        sequence: 4
+        description: "在公园遇见洛伦兹独自散步，陪他走一段"
+      - scene_id: "scene_08"
+        sequence: 8
+        description: "合影后与洛伦兹的最后对话"
+
+    consequences: "与洛伦兹建立忘年交，最终选择'记住人而非记住理论'"
+
+    end_ending: "ending_lorentz"
+
+# ============================================================
+# 汇聚点（数量不限）
+# ============================================================
+convergence_points:
+  - scene_id: "scene_08"
+    description: "无论走哪条分支，所有世界线在'合影'场景汇聚——29人必须一起拍照"
+    required_conditions:
+      - "完成scene_07（或等价剧情）"
+  - scene_id: "scene_09"
+    description: "所有世界线在'离别'场景汇聚——所有人都要坐火车离开"
+    required_conditions:
+      - "完成scene_08"
+
+# ============================================================
+# 世界线规则（数量不限）
+# ============================================================
+rules:
+  - rule_id: "rule_01"
+    name: "分支规则"
+    description: "choice_01（茶歇选边）决定初始分支方向，但不锁死后续选择"
+    condition: "完成scene_03"
+    effect: "根据choice_01的选择，后续场景中某些对话选项会有不同的默认倾向"
+  - rule_id: "rule_02"
+    name: "汇聚规则"
+    description: "scene_08（合影）和scene_09（离别）是所有世界线的必经之路"
+    condition: "任何世界线"
+    effect: "无论之前如何选择，scene_08和scene_09必定发生"
+  - rule_id: "rule_03"
+    name: "隐藏结局规则"
+    description: "ending_einstein_intimate需要在choice_03中解锁隐藏选项d"
+    condition: "einstein好感度≥70"
+    effect: "解锁'直面爱因斯坦恐惧'的选项，导向最深层的结局"
+  - rule_id: "rule_04"
+    name: "隐藏结局规则"
+    description: "ending_hidden_photo需要在合影场景中选择参与"
+    condition: "至少5个角色好感度≥60"
+    effect: "解锁'站到后排'的选项，导向'第二十九个人'结局"
+  - rule_id: "rule_05"
+    name: "坏结局规则"
+    description: "如果玩家全程未深度参与任何讨论，触发'空白笔记本'结局"
+    condition: "所有属性值<30"
+    effect: "强制导向ending_silence"

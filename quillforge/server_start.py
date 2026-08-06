@@ -10,23 +10,14 @@ if sys.platform == "win32":
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 HOST = "127.0.0.1"
-PORT = 8766
+PORT = 8050
 
 
 def main():
     print("=" * 60)
-    print("  QuillForge - \u901a\u7528\u6587\u672c\u751f\u6210\u5f15\u64ce")
+    print("  QuillForge - 通用文本生成引擎")
     print("=" * 60)
     print()
-
-    # Install deps
-    print("[1/2] \u5b89\u88c5\u4f9d\u8d56...")
-    subprocess.run(
-        [sys.executable, "-m", "pip", "install",
-         "pyyaml", "openai", "fastapi", "uvicorn", "--quiet"],
-        capture_output=True
-    )
-    print("      OK")
 
     # API Key
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -41,8 +32,8 @@ def main():
         print("      [WARNING] \u672a\u8bbe\u7f6e API Key")
 
     print()
-    print(f"[2/2] \u542f\u52a8\u670d\u52a1\u5668...")
-    print(f"      \u524d\u7aef: http://{HOST}:{PORT}")
+    print(f"[1/1] 启动服务器...")
+    print(f"      前端: http://{HOST}:{PORT}")
     print(f"      API:  http://{HOST}:{PORT}/docs")
     print()
 

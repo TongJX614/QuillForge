@@ -1,6 +1,6 @@
 # QuillForge — API 接口文档
 
-> 版本：5.0.0 | 最后更新：2026-07-24 | 基础地址：`http://localhost:8766` | Swagger 文档：`http://localhost:8766/docs`
+> 版本：6.0.0 | 最后更新：2026-08-06 | 基础地址：`http://localhost:8050` | Swagger 文档：`http://localhost:8050/docs`
 
 ---
 
@@ -8,14 +8,14 @@
 
 ```
 ┌─────────────┐   本地路径 / 上传    ┌──────────────────┐
-│  剧本文件夹  │ ──────────────────► │ generic_adapter  │
-│ (YAML 目录)  │                     │ (解析 + 角色提取) │
+│  剧本文件夹  │ ──────────────────► │ adapter/parser   │
+│ (YAML 目录)  │                     │ (解析 + 归一化)   │
 └─────────────┘                     └───────┬──────────┘
                                             │ 结构化数据
                                             ▼
 ┌─────────┐  Session API / 轻量 API  ┌──────────────────┐  prompt   ┌───────────┐
-│ Web 前端 │ ◄────────────────────► │  harness.py       │ ────────► │ DeepSeek  │
-│ /  /play │                        │  5 阶段 Pipeline   │ ◄──────── │ API       │
+│ Web 前端 │ ◄────────────────────► │ quillforge/core   │ ────────► │ DeepSeek  │
+│/ /game /play│                      │ 5 阶段 Pipeline   │ ◄──────── │ API       │
 └─────────┘                        └──────────────────┘  JSON      └───────────┘
                                             │
                                             ▼
@@ -25,13 +25,14 @@
                                    └──────────────────┘
 ```
 
-接口分为 **三套**：
+接口分为 **四套**：
 
 | 类型 | 特点 | 适用场景 |
 |------|------|---------|
 | **Session API** | 有状态会话，`/api/start` → `/generate` → `/choose` | 完整交互游戏流程 |
 | **轻量 API** | 无状态单次调用，`/api/story` + `/api/scene` | 快速集成、脚本调用 |
-| **便捷 API** | 一键操作，`/api/load-folder` + `/api/auto-run` | 批量生成、快速测试 |
+| **便捷 API** | 一键操作，`/api/load-folder` + `/api/auto-run` + `/api/generate-script` | 批量生成、快速测试 |
+| **实时 API** | 无剧本，一句话描述实时生成可玩故事（SSE） | AI 实时生成模式 |
 
 ### 选择驱动叙事
 
@@ -261,7 +262,13 @@
 
 ---
 
-### 3.8 POST `/api/session/{session_id}/choose` — 提交玩家选择
+### 3.8 GET `/generated_audio/{path}` — 读取生成的音频
+
+返回 `generated_audio/` 缓存目录下的 TTS 语音文件（WAV）。同一 (speaker + text) 仅合成一次，磁盘缓存复用。
+
+---
+
+### 3.9 POST `/api/session/{session_id}/choose` — 提交玩家选择
 
 玩家选择后自动续写下一场景。
 
@@ -285,7 +292,7 @@
 
 ---
 
-### 3.9 GET `/api/session/{session_id}/state` — 查询会话状态
+### 3.10 GET `/api/session/{session_id}/state` — 查询会话状态
 
 **响应**：
 
@@ -302,7 +309,7 @@
 
 ---
 
-### 3.10 GET `/api/session/{session_id}/history` — 查看对话历史
+### 3.11 GET `/api/session/{session_id}/history` — 查看对话历史
 
 历史含每个场景的旁白、完整对话和玩家选择（含 `option_id` 和 `consequences`）。
 
@@ -403,7 +410,7 @@
 
 **访问示例**：
 ```
-http://localhost:8765/play?path=C:/Users/tongj/Desktop/测试剧本/回魂公寓
+http://localhost:8050/play?path=C:/Users/tongj/Desktop/测试剧本/回魂公寓
 ```
 
 ---
@@ -536,7 +543,7 @@ const decoder = new TextDecoder();
 }
 ```
 
-> 内置示例存放在 `samples/` 目录，当前包含：回响-DEMO、守夜人、晚风知我意、暗香浮沉、霍格沃兹的阴影、一条狗的使徒。
+> 内置示例存放在 `samples/` 目录，当前包含：回响-DEMO、索尔维0801。
 
 ---
 
@@ -552,9 +559,57 @@ const decoder = new TextDecoder();
 
 ---
 
-## 六、典型调用流程
+### 5.6 POST `/api/generate-script` — AI 生成剧本
 
-### 6.1 一键运行（最简方式）
+输入一句话描述，SSE 流式返回生成进度，最终产出完整剧本包（元数据/角色/场景/剧情/世界书）。
+
+---
+
+## 六、AI 实时生成 API
+
+> 无需上传剧本，输入一句话描述即可实时生成可玩故事。所有接口基于 SSE 流式推送，TTS 语音与场景事件实时交错下发。未配置 `TTS_API_KEY` 时自动降级为纯文字模式。
+
+### 6.1 POST `/api/realtime/start` — 开始实时生成（SSE）
+
+输入一句话描述，流式返回故事种子 + 第一个场景，并后台预生成角色立绘。
+
+**请求体**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `prompt` | string | 是 | 剧本描述（≤ 150 字） |
+
+**限流**：10 次/分钟（按客户端 IP）。
+
+---
+
+### 6.2 POST `/api/realtime/{session_id}/choose` — 选择分支（SSE）
+
+玩家做出选择，流式返回下一场景（含 TTS 实时推送）。
+
+**请求体**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `choice_index` | int | 是 | 选中选项索引 |
+
+---
+
+### 6.3 GET `/api/realtime/{session_id}/state` — 状态查询
+
+返回实时生成会话的当前状态（场景进度、历史等）。
+
+---
+
+### 6.4 GET `/api/realtime/{session_id}/assets-stream` — 预生成美术素材（SSE）
+
+为实时会话预生成角色立绘 + 已生成场景的背景图，Phase 1 完成后下发 `assets_ready` 事件，前端即可开始游戏。
+
+---
+
+## 七、典型调用流程
+
+### 7.1 一键运行（最简方式）
 
 ```
 1. POST /api/auto-run         →  传入路径，自动跑完所有场景（等全部完成）
@@ -562,7 +617,7 @@ const decoder = new TextDecoder();
 3. 渲染返回的 results 数组
 ```
 
-### 6.2 Session API（交互式游戏）
+### 7.2 Session API（交互式游戏）
 
 ```
 1. POST /api/load-folder          →  加载剧本
@@ -573,7 +628,7 @@ const decoder = new TextDecoder();
 6. 重复 4~5 直到 state=finished
 ```
 
-### 6.3 轻量 API（脚本集成）
+### 7.3 轻量 API（脚本集成）
 
 ```
 1. POST /api/story  →  加载剧本，获取 totalScenes
@@ -582,9 +637,18 @@ const decoder = new TextDecoder();
 4. 重复 2~3 直到 sceneIndex >= totalScenes
 ```
 
+### 7.4 AI 实时生成（无剧本）
+
+```
+1. POST /api/realtime/start                  →  输入一句话描述，流式获得故事种子 + 第一场景
+2. GET  /api/realtime/{id}/assets-stream     →  预生成立绘/背景（可选）
+3. POST /api/realtime/{id}/choose            →  提交选择，流式获得下一场景
+4. 重复 3 直到故事结束
+```
+
 ---
 
-## 七、5 阶段 Pipeline
+## 八、5 阶段 Pipeline
 
 每次生成请求经过以下阶段：
 
@@ -612,7 +676,7 @@ const decoder = new TextDecoder();
 
 ---
 
-## 八、剧本目录结构规范
+## 九、剧本目录结构规范
 
 支持两种格式（按文件名关键词自动匹配）：
 
@@ -664,11 +728,12 @@ const decoder = new TextDecoder();
 
 ---
 
-## 九、端点总览
+## 十、端点总览
 
 | Method | Path | 类型 | 用途 |
 |--------|------|------|------|
 | GET | `/` | 前端 | Galgame VN 主界面（流式演出/立绘/自动播放/历史） |
+| GET | `/game` | 前端 | 互动剧场页面（VN Galgame 引擎） |
 | GET | `/play` | 前端 | 轻量版互动剧情 Web 界面 |
 | POST | `/api/upload` | Session | 上传单个剧本文件 |
 | POST | `/api/upload-directory` | Session | 上传文件夹 |
@@ -680,7 +745,12 @@ const decoder = new TextDecoder();
 | POST | `/api/session/{id}/generate-stream` | Session | 流式生成场景（SSE 逐条推送） |
 | GET | `/api/session/{id}/assets-stream` | Session | 预生成美术素材（SSE 按需生图） |
 | POST | `/api/generate-script` | 便捷 | AI 生成剧本（SSE 流式进度） |
+| POST | `/api/realtime/start` | 实时 | AI 实时生成-开始（SSE，一句话 → 故事） |
+| POST | `/api/realtime/{id}/choose` | 实时 | AI 实时生成-选择分支（SSE） |
+| GET | `/api/realtime/{id}/state` | 实时 | AI 实时生成-状态查询 |
+| GET | `/api/realtime/{id}/assets-stream` | 实时 | AI 实时生成-预生成立绘/背景（SSE） |
 | GET | `/generated_images/{path}` | 资源 | 读取生成的背景/立绘图片 |
+| GET | `/generated_audio/{path}` | 资源 | 读取生成的 TTS 语音音频 |
 | POST | `/api/session/{id}/choose` | Session | 提交玩家选择 |
 | GET | `/api/session/{id}/state` | Session | 查询会话状态 |
 | GET | `/api/session/{id}/history` | Session | 查看对话历史 |
@@ -694,7 +764,7 @@ const decoder = new TextDecoder();
 
 ---
 
-## 十、错误处理
+## 十一、错误处理
 
 所有接口统一返回：
 

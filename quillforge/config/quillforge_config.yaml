@@ -9,9 +9,9 @@ quillforge:
   llm:
     # DeepSeek API（OpenAI 兼容格式）
     apiBase: "https://api.deepseek.com"
-    model: "deepseek-chat"
+    model: "deepseek-v4-flash"
     temperature: 0.8
-    maxTokens: 2000
+    maxTokens: 4000
     timeout: 30000  # 毫秒
 
   # Pipeline 阶段配置

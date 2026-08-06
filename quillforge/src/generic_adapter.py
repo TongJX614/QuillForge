@@ -339,7 +339,14 @@ class GenericScriptAdapter:
                 else:
                     chars_present.append(item)
         else:
-            chars_present = raw_chars
+            # 非 list 格式（如字符串 "lin_xiao, su_ran"）：按分隔符拆分，
+            # 避免逐字符遍历导致生成大量占位角色
+            if isinstance(raw_chars, str) and raw_chars.strip():
+                chars_present = [
+                    c.strip() for c in re.split(r'[,，、;；\s]+', raw_chars.strip()) if c.strip()
+                ]
+            else:
+                chars_present = []
         return {
             "id": s.get("id", s.get("scene_id", "")),
             "name": s.get("name", s.get("title", s.get("id", ""))),
@@ -353,6 +360,7 @@ class GenericScriptAdapter:
             "branching_point": s.get("branching_point", False),
             "critical_choice": s.get("critical_choice", ""),
             "narrative_notes": s.get("narrative_notes", s.get("notes", "")),
+            "trigger_conditions": s.get("trigger_conditions", s.get("triggerCondition", s.get("trigger_condition", {}))),
         }
 
     def _parse_scene_assets(self, data: dict) -> list[dict]:
@@ -483,6 +491,7 @@ class GenericScriptAdapter:
         player_choice: str = "",
         previous_context: dict = None,
         choice_history: list[dict] = None,
+        player_state: str = None,
     ) -> dict:
         """
         构建 Harness 标准输入
@@ -490,6 +499,7 @@ class GenericScriptAdapter:
         player_choice: 玩家在上一场景做出的选择文本
         previous_context: 上一场景的生成结果
         choice_history: 玩家的完整选择历史 [{scene_id, scene_name, option_id, player_choice, consequences}]
+        player_state: 玩家累积状态摘要（属性/关系/性格变化）
         """
         if scene_index >= len(self.scenes):
             raise ValueError(f"场景索引越界: {scene_index} >= {len(self.scenes)}")
@@ -555,9 +565,45 @@ class GenericScriptAdapter:
         harness_input["_worldlines"] = self._extract_worldlines()
         harness_input["_sceneDetails"] = self._extract_scene_details(scene)
 
+        # ── 活跃世界线分支检测：根据玩家选择历史确定当前分支，注入高优先级上下文 ──
+        active_branch = self._detect_active_branch(choice_history)
+        if active_branch:
+            harness_input["_activeBranchContext"] = active_branch
+
+        # ── M8: 角色 voice_tone / speakingStyle 注入 ──
+        voice_tone_parts = []
+        for c in characters:
+            if isinstance(c, dict):
+                cname = c.get("name", "")
+                cstyle = c.get("speakingStyle", "") or c.get("voice_tone", "")
+                if cname and cstyle:
+                    voice_tone_parts.append(f"{cname}：{str(cstyle).strip()}")
+        if voice_tone_parts:
+            harness_input["_characterVoiceTones"] = "\n".join(voice_tone_parts)
+
+        # ── M12: 角色关系注入（补充全局关系网络） ──
+        char_rels_parts = []
+        for c in characters:
+            if isinstance(c, dict):
+                cname = c.get("name", "")
+                crels = c.get("relationships", "")
+                if cname and crels:
+                    char_rels_parts.append(f"【{cname}的角色关系】{str(crels).strip()}")
+        if char_rels_parts:
+            char_rels_text = "\n".join(char_rels_parts)
+            existing_rels = harness_input.get("_relationshipNetwork", "")
+            if existing_rels:
+                harness_input["_relationshipNetwork"] = existing_rels + "\n\n" + char_rels_text
+            else:
+                harness_input["_relationshipNetwork"] = char_rels_text
+
         # ── 注入完整选择历史（含后果），让 LLM 知道玩家此前做了什么 ──
         if choice_history:
             harness_input["_choiceHistory"] = self._format_choice_history(choice_history)
+
+        # ── 注入玩家累积状态（属性/关系/性格量化变化） ──
+        if player_state:
+            harness_input["_playerState"] = player_state
 
         # 当本场景有剧本选项时，标记跳过 Stage 4 的 LLM 生成
         # 注意：传入 choice_history 以便过滤 unlock_conditions
@@ -605,10 +651,11 @@ class GenericScriptAdapter:
                 continue
 
             # 解析 "在scene_XX选择YY"
-            m = re.match(r'在\s*(scene_\d+|scene\d+)\s*选择\s*(.+)', cond_str)
+            m = re.match(r'在\s*(\S+)\s*选择\s*(.+)', cond_str)
             if not m:
-                # 无法解析的条件，保守起见不解锁
-                continue
+                # 无法解析的条件视为不满足（保守不解锁），
+                # 否则全部条件都无法解析时会错误地无条件解锁隐藏选项
+                return False
 
             target_scene = m.group(1).strip()
             target_value = m.group(2).strip()
@@ -712,6 +759,9 @@ class GenericScriptAdapter:
                     "effect": effect or c.get("description", ""),
                     # 保留 consequences 供 choose() 存入历史
                     "consequences": consequences if isinstance(consequences, dict) else {},
+                    # 保留选项顶层的关系/性格影响数据
+                    "relationship_changes": c.get("relationship_changes", []),
+                    "personality_impact": c.get("personality_impact", ""),
                 })
             elif isinstance(c, str):
                 result.append({"id": str(len(result)), "text": c, "description": ""})
@@ -748,6 +798,30 @@ class GenericScriptAdapter:
                 if len(content) > 800:
                     content = content[:800] + "…"
                 rules.append(f"【{section_name}】{content}")
+        # 通配提取：收集未被硬编码标题匹配的 ## / ### 章节
+        known_names = {"必须遵守", "禁止出现", "情感基调", "故事边界",
+                       "世界背景", "核心科技", "组织设定", "社会规则", "历史背景", "时间线", "大事记"}
+        wildcard_sections = []
+        for m in re.finditer(r'^(#{2,3})\s+(.+?)\s*\n(.*?)(?=^#{2,3}\s|\Z)', self.worldbook, re.DOTALL | re.MULTILINE):
+            section_title = m.group(2).strip()
+            if section_title not in known_names:
+                content = m.group(3).strip()
+                if content:
+                    wildcard_sections.append((section_title, content))
+        if wildcard_sections:
+            wc_parts = []
+            wc_total_len = 0
+            for title, content in wildcard_sections:
+                entry = f"[补充规则]{title}：{content}"
+                if wc_total_len + len(entry) > 800:
+                    remaining = 800 - wc_total_len
+                    if remaining > 20:
+                        wc_parts.append(entry[:remaining] + "…")
+                    break
+                wc_parts.append(entry)
+                wc_total_len += len(entry)
+            if wc_parts:
+                rules.append("\n\n".join(wc_parts))
         # 如果世界书中包含年份/历史关键词，确保被提取到
         if not any("世界背景" in r for r in rules):
             # 尝试提取包含年份的段落（如 2087年、大断联等关键历史信息）
@@ -1095,6 +1169,104 @@ class GenericScriptAdapter:
                 parts.append("\n【世界线规则】" + "\n  " + "\n  ".join(rule_strs))
         return "\n\n".join(parts)
 
+    def _detect_active_branch(self, choice_history: list[dict] | None) -> str:
+        """根据玩家选择历史检测当前所在的世界线分支，返回分支上下文描述。
+
+        匹配逻辑：遍历 world_lines 中的分支线（跳过主线），
+        检查其 conditions 是否与玩家选择历史匹配。
+        匹配成功则返回该分支的路径描述、后果等上下文信息，
+        供 LLM 生成时体现分支差异。
+        """
+        if not choice_history:
+            return ""
+        world_lines = self.raw_data.get("world_lines", [])
+        if not world_lines:
+            return ""
+
+        # 构建玩家选择 ID 集合和文本集合
+        player_option_ids: set[str] = set()
+        player_choice_texts: set[str] = set()
+        player_scene_choices: dict[str, str] = {}  # {scene_id: option_id}
+        for h in choice_history:
+            oid = h.get("option_id", "")
+            if oid:
+                player_option_ids.add(oid)
+            text = h.get("player_choice", "")
+            if text:
+                player_choice_texts.add(text)
+            sid = h.get("scene_id", "")
+            if sid and oid:
+                player_scene_choices[sid] = oid
+            if sid and text:
+                player_scene_choices.setdefault(sid, text)
+
+        import re as _re
+
+        def _branch_condition_met(cond: dict) -> bool:
+            """检查分支条件是否匹配玩家历史"""
+            ctype = str(cond.get("type", "")).strip().lower()
+            cvalue = str(cond.get("value", "")).strip()
+            if ctype == "choice_made":
+                # 格式 1："在scene_XX选择YY"
+                m = _re.match(
+                    r'(?:在)?\s*(scene_\w+).{0,6}(?:选择|选|select|choose)\s*(.+)',
+                    cvalue, _re.IGNORECASE
+                )
+                if m:
+                    target_scene = m.group(1).strip()
+                    target_choice = m.group(2).strip()
+                    actual = player_scene_choices.get(target_scene, "")
+                    return (
+                        actual == target_choice
+                        or target_choice in actual
+                        or actual in target_choice
+                    )
+                # 格式 2：简单值（选项 ID）
+                return cvalue in player_option_ids or cvalue in player_choice_texts
+            return False
+
+        # 遍历分支线，找第一个条件全部满足的
+        for wl in world_lines:
+            if not isinstance(wl, dict):
+                continue
+            wl_id = wl.get("id", "")
+            # 跳过主线（main_line 或无 conditions 的）
+            conditions = wl.get("conditions", [])
+            if not conditions or not isinstance(conditions, list):
+                continue
+            # 检查所有条件是否满足
+            if all(_branch_condition_met(c) for c in conditions if isinstance(c, dict)):
+                # 匹配成功，构建分支上下文
+                name = wl.get("name", wl_id)
+                desc = str(wl.get("description", "")).strip()
+                consequences = str(wl.get("consequences", "")).strip()
+                # 提取当前场景在该分支路径中的描述
+                path = wl.get("path", [])
+                path_descriptions = []
+                if isinstance(path, list):
+                    for p in sorted(path, key=lambda x: x.get("sequence", 0)):
+                        if isinstance(p, dict):
+                            sid = p.get("scene_id", "")
+                            pdesc = str(p.get("description", "")).strip()
+                            if pdesc:
+                                path_descriptions.append(f"  - {sid}: {pdesc}")
+
+                parts = [f"【当前世界线分支：{name}】"]
+                if desc:
+                    parts.append(f"分支描述：{desc}")
+                if path_descriptions:
+                    parts.append("分支路径：\n" + "\n".join(path_descriptions))
+                if consequences:
+                    parts.append(f"分支后果：{consequences}")
+                parts.append(
+                    "⚠ 生成内容必须体现此分支的叙事方向，"
+                    "不得按照其他分支的路线生成。"
+                    "玩家的选择已经决定了故事走向，请严格遵循分支设定。"
+                )
+                return "\n".join(parts)
+
+        return ""
+
     def _extract_scene_details(self, scene: dict) -> str:
         """提取当前场景的详细信息（氛围、叙事指导、互动、分支点）"""
         if not scene:
@@ -1180,6 +1352,7 @@ class GenericScriptAdapter:
             "total_scenes": len(self.scenes),
             "scene_names": [s.get("name", s.get("id", "")) for s in self.scenes],
             "has_worldbook": bool(self.worldbook),
+            "is_realtime": bool(self.raw_data.get("is_realtime", False)) if isinstance(self.raw_data, dict) else False,
         }
 
     @staticmethod
@@ -1234,6 +1407,8 @@ def _fill_character_gaps(characters: list[dict]) -> None:
         backstory = c.get("background", "")
         role = c.get("role", "")
         combined = f"{personality}。{backstory}"
+        _inferred_fields: list[str] = []
+        _placeholder_fields: list[str] = []
 
         # ── motivation: 从 backstory 中提取目的/动机 ──
         if not c.get("motivation"):
@@ -1254,13 +1429,16 @@ def _fill_character_gaps(characters: list[dict]) -> None:
                 m = re.search(pat, backstory)
                 if m:
                     c["motivation"] = m.group(1).strip()
+                    _inferred_fields.append("motivation")
                     break
             if not c.get("motivation") and personality:
                 trait = re.search(r'([^\s，。；]{2,6}(?:感|欲|心|力))', personality)
                 if trait:
                     c["motivation"] = f"{trait.group(1)}驱使"
+                    _inferred_fields.append("motivation")
             if not c.get("motivation"):
                 c["motivation"] = f"基于{role.split('/')[0].strip()}身份参与故事"
+                _placeholder_fields.append("motivation")
 
         # ── secrets: 从 backstory 中提取隐藏信息 ──
         if not c.get("secrets"):
@@ -1279,9 +1457,11 @@ def _fill_character_gaps(characters: list[dict]) -> None:
                     if len(secret) > 80:
                         secret = secret[:80] + "…"
                     c["secrets"] = secret
+                    _inferred_fields.append("secrets")
                     break
             if not c.get("secrets"):
                 c["secrets"] = "故事中逐渐揭示的隐藏过往"
+                _placeholder_fields.append("secrets")
 
         # ── relationships: 从 backstory 提取与其他角色的关系 ──
         if not c.get("relationships"):
@@ -1320,8 +1500,10 @@ def _fill_character_gaps(characters: list[dict]) -> None:
                             break
             if rels:
                 c["relationships"] = "；".join(rels)
+                _inferred_fields.append("relationships")
             else:
                 c["relationships"] = "与其他角色在故事进程中逐步建立联系"
+                _placeholder_fields.append("relationships")
 
         # ── appearance: 从 personality 中提取外貌/气质相关描述 ──
         if not c.get("appearance"):
@@ -1335,6 +1517,7 @@ def _fill_character_gaps(characters: list[dict]) -> None:
                 m = re.search(pat, personality)
                 if m:
                     c["appearance"] = m.group(1).strip()
+                    _inferred_fields.append("appearance")
                     break
             if not c.get("appearance"):
                 # 从 voice_tone（已在 speakingStyle 中）提取气质
@@ -1343,8 +1526,10 @@ def _fill_character_gaps(characters: list[dict]) -> None:
                     style_match = re.search(r'([^，。；\n]{2,15}(?:温暖|冷静|沉稳|温柔|爽朗|沧桑|低沉|活泼)[^。；\n]{0,15})', style)
                     if style_match:
                         c["appearance"] = f"说话{style_match.group(1).strip()}"
+                        _inferred_fields.append("appearance")
             if not c.get("appearance"):
                 c["appearance"] = f"符合{role.split('/')[0].strip()}身份的外表"
+                _placeholder_fields.append("appearance")
 
         # ── arc: 从 backstory 提取角色变化趋势 ──
         if not c.get("arc"):
@@ -1356,9 +1541,15 @@ def _fill_character_gaps(characters: list[dict]) -> None:
                     m = re.search(pat, backstory)
                     if m:
                         c["arc"] = m.group(1).strip()
+                        _inferred_fields.append("arc")
                         break
             if not c.get("arc"):
                 c["arc"] = f"从{role.split('/')[0].strip()}身份出发，经历内心冲突后做出关键抉择"
+                _placeholder_fields.append("arc")
+
+        # 记录推断和占位字段元数据
+        c["_inferred_fields"] = _inferred_fields
+        c["_placeholder_fields"] = _placeholder_fields
 
 
 def load_story(path: str) -> dict:
@@ -1469,6 +1660,10 @@ def load_story(path: str) -> dict:
                 "id": c.get("id", c.get("name", "")),
                 "name": c.get("name", ""),
                 "role": c.get("role", "") + (f"，{c.get('occupation', '')}" if c.get("occupation") else ""),
+                "gender": str(c.get("gender", c.get("性别", "unknown"))).strip(),
+                "age": str(c.get("age", c.get("年龄", "unknown"))).strip(),
+                "voiceId": str(c.get("voiceId", c.get("voice_id", ""))).strip(),
+                "voiceSample": str(c.get("voiceSample", c.get("voice_sample", ""))).strip(),
                 "personality": personality if personality else "未定义",
                 "speakingStyle": speaking_style,
                 "background": backstory,
@@ -1543,96 +1738,11 @@ def load_story(path: str) -> dict:
 
 def _format_character_for_prompt(c: dict) -> dict:
     """将原始 YAML 角色数据格式化为 prompt 可用的字符串字段。
-    与 GenericScriptAdapter._normalize_character 逻辑一致，
+    委托给 GenericScriptAdapter._normalize_character 的相同逻辑，
     确保 auto_run 路径与 session 路径角色数据格式统一。"""
-    import re as _re
-    name = c.get("name", c.get("id", "未知"))
-    role = c.get("role", c.get("occupation", c.get("职业", "")))
-
-    # personality 标签提取（多行列表 → 逗号分隔）
-    personality = str(c.get("personality", c.get("性格", "")))
-    if "\n" in personality:
-        tags = _re.findall(r'[-•]\s*([^：:\n]+)[：:]?', personality)
-        personality = "、".join(t.strip() for t in tags[:4]) if tags else personality[:80]
-
-    # 说话风格
-    speaking_style = (
-        c.get("speakingStyle", "")
-        or c.get("speaking_style", "")
-        or c.get("voice_tone", "")
-        or c.get("说话风格", "")
-    )
-    if "\n" in str(speaking_style):
-        speaking_style = str(speaking_style).split("\n")[0][:80]
-
-    # 背景故事
-    background = str(c.get("background", c.get("backstory", c.get("背景", ""))))
-    if len(background) > 150:
-        background = background[:150] + "…"
-
-    # 动机
-    motivation = str(c.get("motivation", c.get("动机", ""))).strip()
-    if "\n" in motivation:
-        lines = [l.strip().lstrip("- ") for l in motivation.split("\n") if l.strip()][:2]
-        motivation = "；".join(lines)
-    if len(motivation) > 100:
-        motivation = motivation[:100] + "…"
-
-    # 秘密
-    secrets_raw = c.get("secrets", c.get("秘密", []))
-    if isinstance(secrets_raw, list):
-        secrets = "；".join(str(s).strip() for s in secrets_raw[:3])
-    else:
-        secrets = str(secrets_raw).strip()
-    if len(secrets) > 120:
-        secrets = secrets[:120] + "…"
-
-    # 角色关系
-    rels_raw = c.get("relationships", c.get("关系", []))
-    relationships = []
-    if isinstance(rels_raw, list):
-        for r in rels_raw[:4]:
-            if isinstance(r, dict):
-                relationships.append(
-                    f"{r.get('target', '')}（{r.get('type', '')}）：{r.get('description', '')}"
-                )
-            elif isinstance(r, str):
-                relationships.append(r)
-    rel_str = "；".join(relationships) if relationships else ""
-    if len(rel_str) > 150:
-        rel_str = rel_str[:150] + "…"
-
-    # 外貌
-    appearance = str(c.get("appearance", c.get("外貌", ""))).strip()
-    if "\n" in appearance:
-        appearance = "；".join(l.strip() for l in appearance.split("\n") if l.strip())
-    if len(appearance) > 120:
-        appearance = appearance[:120] + "…"
-
-    # 成长弧线
-    arc = str(c.get("arc", c.get("角色弧线", ""))).strip()
-    if "\n" in arc:
-        lines = [l.strip() for l in arc.split("\n") if l.strip()]
-        arc = " → ".join(lines[:3])
-    if len(arc) > 100:
-        arc = arc[:100] + "…"
-
-    return {
-        "id": c.get("id", c.get("character_id", "")),
-        "name": str(name),
-        "role": str(role),
-        "gender": str(c.get("gender", c.get("性别", ""))).strip(),
-        "age": str(c.get("age", c.get("年龄", ""))).strip(),
-        "occupation": str(c.get("occupation", c.get("职业", ""))).strip(),
-        "personality": str(personality),
-        "speakingStyle": str(speaking_style),
-        "background": background,
-        "motivation": motivation,
-        "secrets": secrets,
-        "relationships": rel_str,
-        "appearance": appearance,
-        "arc": arc,
-    }
+    # 复用实例方法的逻辑（创建临时 adapter 实例）
+    _adapter = GenericScriptAdapter.__new__(GenericScriptAdapter)
+    return _adapter._normalize_character(c)
 
 
 def get_scene_characters(story: dict, scene: dict) -> list[dict]:

@@ -1,0 +1,14 @@
+# QuillForge pre-commit 质量门禁
+# 安装: pip install pre-commit && pre-commit install
+# 手动运行: pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: architecture-check
+        name: 架构约束检查 (AGENTS.md)
+        entry: python scripts/check_architecture.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]

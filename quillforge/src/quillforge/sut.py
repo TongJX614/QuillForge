@@ -6,25 +6,26 @@ SUT = LLM 客户端 + Prompt 模板加载/渲染
 Harness 编排器通过 SUT 接口调用 LLM，不直接接触 LLM 客户端或 Prompt 模板。
 这样可以替换 SUT（如换 LLM 服务商、换 Prompt 策略）而不影响 Harness 编排逻辑。
 
-从原 harness.py 迁移（现已重构为 QuillForge）：
-  - LLMClient 类（generate / generate_stream / generate_json / generate_json_stream）
+LLM 客户端已统一至 llm_client.py，本模块仅保留：
   - load_config / load_prompt / render_template 函数
-  - 系统提示词渲染逻辑
+  - NarrativeSUT 类（Prompt 渲染 + LLM 调用委托）
 """
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
-import time
 from pathlib import Path
 from typing import Generator
 
 import yaml
-from dotenv import load_dotenv
-from openai import OpenAI
+
+# 确保 src/ 在 sys.path 中
+_SRC_DIR = str(Path(__file__).resolve().parent.parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from llm_client import LLMClient  # noqa: E402
 
 # 项目路径
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # quillforge/
@@ -122,134 +123,9 @@ def render_template(template: str, variables: dict) -> str:
 
 
 # ═══════════════════════════════════════════════════════
-# LLM 客户端
+# LLM 客户端（已迁移至 llm_client.py，此处保留向后兼容导入）
 # ═══════════════════════════════════════════════════════
-
-class LLMClient:
-    """统一的 LLM 调用接口"""
-
-    def __init__(self, config: dict):
-        # 加载项目根目录下的 .env（支持 DEEPSEEK_API_KEY / OPENAI_API_KEY）
-        env_path = PROJECT_ROOT.parent / ".env"
-        load_dotenv(env_path)
-        load_dotenv(PROJECT_ROOT / ".env")  # 也尝试加载 quillforge/.env
-
-        llm_cfg = config.get("quillforge", {}).get("llm", {})
-        self.model = llm_cfg.get("model", "deepseek-chat")
-        self.temperature = llm_cfg.get("temperature", 0.8)
-        self.max_tokens = llm_cfg.get("maxTokens", 3000)
-
-        # 优先使用 DEEPSEEK_API_KEY，兼容 OPENAI_API_KEY
-        api_key = (
-            os.environ.get("DEEPSEEK_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or llm_cfg.get("apiKey", "sk-placeholder")
-        )
-        api_base = llm_cfg.get("apiBase", "https://api.deepseek.com")
-
-        self.client = OpenAI(api_key=api_key, base_url=api_base)
-
-    def generate(self, system_prompt: str, user_prompt: str, model: str = "") -> str:
-        """调用 LLM 生成文本"""
-        response = self.client.chat.completions.create(
-            model=model or self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
-        return response.choices[0].message.content or ""
-
-    def generate_stream(self, system_prompt: str, user_prompt: str, model: str = ""):
-        """调用 LLM 并以流式逐块 yield 输出文本（用于旁白实时推送）"""
-        stream = self.client.chat.completions.create(
-            model=model or self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=True,
-        )
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            if delta is not None and delta.content:
-                yield delta.content
-
-    def generate_json(self, system_prompt: str, user_prompt: str, model: str = "", _retries: int = 2) -> dict | list:
-        """调用 LLM 并解析 JSON 输出，失败自动重试"""
-        last_err = None
-        for attempt in range(_retries + 1):
-            raw = self.generate(system_prompt, user_prompt, model)
-            # 尝试提取 JSON 块
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
-            json_str = json_match.group(1).strip() if json_match else raw.strip()
-
-            # 如果整体是数组或对象，直接解析
-            try:
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                # 尝试找第一个 [ 或 { 到最后一个 ] 或 }
-                for start_char, end_char in [('[', ']'), ('{', '}')]:
-                    start = json_str.find(start_char)
-                    end = json_str.rfind(end_char)
-                    if start != -1 and end != -1 and end > start:
-                        try:
-                            return json.loads(json_str[start:end + 1])
-                        except json.JSONDecodeError:
-                            continue
-                last_err = raw[:500]
-                if attempt < _retries:
-                    print(f"  [JSON RETRY] 解析失败，重试第 {attempt + 1} 次...")
-                    continue
-        raise ValueError(f"无法解析 LLM 输出为 JSON (重试 {_retries} 次):\n{last_err}")
-
-    def generate_json_stream(self, system_prompt: str, user_prompt: str, model: str = ""):
-        """流式调用 LLM，增量解析 JSON 数组并逐个 yield 其中的顶层对象。
-        用于对话流式推送：每解析出一条完整对象立即 yield，无需等待整个数组生成完，
-        从而消除"旁白播完后干等全部对话生成"的空白等待。
-        采用括号深度 + 字符串状态机扫描（游标只前进，整体 O(n)），
-        兼容 ```json 代码块包裹、数组括号以及对象内嵌套/转义引号。"""
-        buf = ""
-        pos = 0          # 已扫描游标
-        depth = 0        # 当前对象嵌套深度
-        in_string = False
-        escape = False
-        obj_start = -1   # 当前顶层对象起始位置
-        for chunk in self.generate_stream(system_prompt, user_prompt, model):
-            buf += chunk
-            while pos < len(buf):
-                ch = buf[pos]
-                if in_string:
-                    if escape:
-                        escape = False
-                    elif ch == "\\":
-                        escape = True
-                    elif ch == '"':
-                        in_string = False
-                else:
-                    if ch == '"':
-                        in_string = True
-                    elif ch == "{":
-                        if depth == 0:
-                            obj_start = pos
-                        depth += 1
-                    elif ch == "}":
-                        if depth > 0:
-                            depth -= 1
-                            if depth == 0 and obj_start != -1:
-                                obj_str = buf[obj_start:pos + 1]
-                                try:
-                                    yield json.loads(obj_str)
-                                except json.JSONDecodeError:
-                                    pass
-                                obj_start = -1
-                pos += 1
+# from llm_client import LLMClient  — 已在文件顶部导入
 
 
 # ═══════════════════════════════════════════════════════
@@ -268,7 +144,18 @@ class NarrativeSUT:
 
     def __init__(self, config: dict | None = None):
         self.config = config or load_config()
-        self.llm = LLMClient(self.config)
+        llm_cfg = self.config.get("quillforge", {}).get("llm", {})
+        # 使用统一 LLM 客户端，从配置文件读取参数
+        self.llm = LLMClient(
+            model=llm_cfg.get("model", "deepseek-chat"),
+            temperature=llm_cfg.get("temperature", 0.8),
+            max_tokens=llm_cfg.get("maxTokens", 3000),
+            timeout=90.0,
+            connect_timeout=10.0,
+            api_key=llm_cfg.get("apiKey") or None,
+            api_base=llm_cfg.get("apiBase") or None,
+            extra_body={"thinking": {"type": "disabled"}},
+        )
         # 加载所有 Prompt 模板
         self.prompts = {
             "system": load_prompt("system_prompt_v2.md"),
@@ -282,24 +169,43 @@ class NarrativeSUT:
         """渲染 Prompt 模板"""
         return render_template(template, variables)
 
-    def render_system_prompt(self, extra: dict, harness_input) -> str:
-        """构建系统提示词（融合世界书约束和叙事风格）"""
-        sys_prompt_vars = {
-            "narrativeStyle": extra.get("_narrativeStyle", "第三人称叙事"),
-            "worldbookRules": extra.get("_worldbook", ""),
-            "plotSummary": extra.get("_plotSummary", ""),
-            "coreConflict": extra.get("_coreConflict", ""),
-            "themes": extra.get("_themes", ""),
-            "relationshipNetwork": extra.get("_relationshipNetwork", ""),
-            "sceneAtmosphere": (
-                extra.get("_sceneAtmosphere", "")
-                or extra.get("_sceneDetails", "")[:200]
-            ),
-            "narrativeNotes": extra.get("_narrativeNotes", ""),
-            "emotionalArc": extra.get("_emotionalArc", ""),
-            "minDialogues": harness_input.options.dialogue_count_min,
-            "maxDialogues": harness_input.options.dialogue_count_max,
-        }
+    def render_system_prompt(self, extra, harness_input) -> str:
+        """构建系统提示词（融合世界书约束和叙事风格）
+        
+        extra 支持 dict（向后兼容）和 ExtraContext（类型安全）两种输入。
+        """
+        # 兼容 ExtraContext 对象
+        if hasattr(extra, "to_prompt_variables"):
+            sys_prompt_vars = {
+                "narrativeStyle": extra.narrative_style or "第三人称叙事",
+                "worldbookRules": extra.worldbook,
+                "plotSummary": extra.plot_summary,
+                "coreConflict": extra.core_conflict,
+                "themes": extra.themes,
+                "relationshipNetwork": extra.relationship_network,
+                "sceneAtmosphere": extra.scene_details[:200] if extra.scene_details else "",
+                "narrativeNotes": "",
+                "emotionalArc": "",
+                "minDialogues": harness_input.options.dialogue_count_min,
+                "maxDialogues": harness_input.options.dialogue_count_max,
+            }
+        else:
+            sys_prompt_vars = {
+                "narrativeStyle": extra.get("_narrativeStyle", "第三人称叙事"),
+                "worldbookRules": extra.get("_worldbook", ""),
+                "plotSummary": extra.get("_plotSummary", ""),
+                "coreConflict": extra.get("_coreConflict", ""),
+                "themes": extra.get("_themes", ""),
+                "relationshipNetwork": extra.get("_relationshipNetwork", ""),
+                "sceneAtmosphere": (
+                    extra.get("_sceneAtmosphere", "")
+                    or extra.get("_sceneDetails", "")[:200]
+                ),
+                "narrativeNotes": extra.get("_narrativeNotes", ""),
+                "emotionalArc": extra.get("_emotionalArc", ""),
+                "minDialogues": harness_input.options.dialogue_count_min,
+                "maxDialogues": harness_input.options.dialogue_count_max,
+            }
         return render_template(self.prompts["system_dynamic"], sys_prompt_vars)
 
     # ── LLM 调用委托 ──
@@ -314,7 +220,7 @@ class NarrativeSUT:
 
     def call_json(self, system: str, user: str, model: str = "", _retries: int = 2) -> dict | list:
         """调用 LLM 并解析 JSON 输出"""
-        return self.llm.generate_json(system, user, model, _retries)
+        return self.llm.generate_json(system, user, model, retries=_retries)
 
     def call_json_stream(self, system: str, user: str, model: str = ""):
         """调用 LLM 流式生成并增量解析 JSON 数组"""

@@ -15,8 +15,12 @@ import re
 import time
 import base64
 import hashlib
+import threading
 import urllib.request
 from pathlib import Path
+
+import logging
+logger = logging.getLogger(__name__)
 
 # 加载项目 .env（与 quillforge 保持一致：工作区根目录 + quillforge 目录）
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent  # quillforge
@@ -24,19 +28,41 @@ try:
     from dotenv import load_dotenv
     load_dotenv(_PROJECT_ROOT.parent / ".env")
     load_dotenv(_PROJECT_ROOT / ".env")
-except Exception:
-    pass
+except Exception as e:
+    logger.warning("[image_gen] dotenv 加载失败: %s", e)
+
+
+def _get_settings_safe():
+    """安全获取配置，失败时返回 None"""
+    try:
+        from config_manager import get_settings
+        return get_settings()
+    except Exception as e:
+        logger.warning("[image_gen] 配置获取失败: %s", e)
+        return None
+
 
 # 生成图片的磁盘缓存目录
 IMAGES_DIR = _PROJECT_ROOT / "generated_images"
 
 # 角色立绘自动去背景（rembg AI 抠图）：默认开启，设 IMAGE_REMOVE_BG=false 可关闭
-_REMOVE_BG_ENABLED = os.environ.get("IMAGE_REMOVE_BG", "true").strip().lower() not in ("false", "0", "off", "no")
+_settings = _get_settings_safe()
+_REMOVE_BG_ENABLED = (
+    _settings.image_remove_bg.strip().lower() not in ("false", "0", "off", "no")
+    if _settings else
+    os.environ.get("IMAGE_REMOVE_BG", "true").strip().lower() not in ("false", "0", "off", "no")
+)
 
 # 默认尺寸（可被 .env 覆盖）：背景横屏 16:9、立绘竖屏
 # 1344x768 / 768x1344 同时被硅基流动 FLUX/Kolors 与智谱 CogView 支持
-DEFAULT_BG_SIZE = os.environ.get("IMAGE_SIZE_BG", "1344x768").strip() or "1344x768"
-DEFAULT_CHAR_SIZE = os.environ.get("IMAGE_SIZE_CHAR", "768x1344").strip() or "768x1344"
+DEFAULT_BG_SIZE = (
+    (_settings.image_size_bg.strip() or "1344x768") if _settings
+    else os.environ.get("IMAGE_SIZE_BG", "1344x768").strip() or "1344x768"
+)
+DEFAULT_CHAR_SIZE = (
+    (_settings.image_size_char.strip() or "768x1344") if _settings
+    else os.environ.get("IMAGE_SIZE_CHAR", "768x1344").strip() or "768x1344"
+)
 
 # 风格后缀：中文描述 + 英文标签，兼顾国产模型（Kolors/CogView 中文强）与 FLUX（英文强）
 STYLE_SUFFIX_CHAR = (
@@ -44,11 +70,40 @@ STYLE_SUFFIX_CHAR = (
     "上半身像，居中构图，纯绿色背景，绿幕，无文字，无水印, "
     "anime style, visual novel character sprite, upper body, bust shot, centered, solid green background, green screen, high quality, detailed"
 )
+# 非人类角色（动物/妖怪/机器人等）：改用全身像构图，避免“上半身像”把动物画成人形
+STYLE_SUFFIX_CHAR_NONHUMAN = (
+    "，日系动漫风格，视觉小说角色立绘，精致细节，电影级光影，"
+    "全身像，居中构图，纯绿色背景，绿幕，无文字，无水印, "
+    "anime style, visual novel character sprite, full body, centered, solid green background, green screen, high quality, detailed"
+)
+
+# species 字段判定为人类的取值（小写比较）
+_HUMAN_SPECIES_VALUES = {"", "human", "人类", "人", "male", "female"}
 STYLE_SUFFIX_BG = (
     "，日系动漫风格，视觉小说场景背景，精致细节，电影级光影，"
     "宽银幕构图，无人物，无文字，无水印, "
     "anime style, visual novel background art, scenic, wide shot, no people, high quality, detailed"
 )
+
+
+# ── 全局图片生成请求交错 ──
+# 避免多线程同时发出请求触发 API IPM 限制，每个请求自动顺延 _IMG_STAGGER_SEC 秒
+_IMG_STAGGER_SEC = float(os.environ.get("IMAGE_STAGGER_SEC", "1.5"))
+_img_stagger_lock = threading.Lock()
+_img_next_slot = 0.0
+
+
+def _img_stagger():
+    """让并发请求依次错开，避免同时到达 API 触发 IPM 限频。"""
+    global _img_next_slot
+    with _img_stagger_lock:
+        now = time.monotonic()
+        wait = _img_next_slot - now
+        if wait > 0:
+            time.sleep(wait)
+            _img_next_slot = time.monotonic() + _IMG_STAGGER_SEC
+        else:
+            _img_next_slot = now + _IMG_STAGGER_SEC
 
 
 def slugify(title: str) -> str:
@@ -58,17 +113,31 @@ def slugify(title: str) -> str:
 
 
 def build_character_prompt(char: dict) -> str:
-    """从角色数据构建生图提示词（name + age + occupation + personality + appearance）"""
+    """从角色数据构建生图提示词（name + age + occupation + personality + appearance）。
+
+    若角色带 species 字段且为非人类形态（动物/妖怪/机器人等），
+    提示词会明确要求按该形态绘制并使用全身像构图，避免画成人形。
+    """
     name = str(char.get("name", "")).strip()
     appearance = str(char.get("appearance", "")).strip() or "（无外貌描述，按角色气质自由发挥）"
     personality = str(char.get("personality", "")).strip()
     age = str(char.get("age", "")).strip()
     age_str = (f"{age}岁" if age.isdigit() else age) if age else ""
     identity = str(char.get("occupation", "")).strip() or str(char.get("role", "")).strip()
-    parts = [f"角色：{name}"] + ([age_str] if age_str else []) + ([identity] if identity else [])
+    species = str(char.get("species", "")).strip()
+    is_human = species.lower() in _HUMAN_SPECIES_VALUES
+    parts = [f"角色：{name}"] + ([age_str] if age_str and is_human else []) + ([identity] if identity else [])
     head = "，".join(parts)
     personality_str = f"。性格：{personality}" if personality else ""
-    return f"{head}{personality_str}。外貌：{appearance}{STYLE_SUFFIX_CHAR}"
+    if is_human:
+        return f"{head}{personality_str}。外貌：{appearance}{STYLE_SUFFIX_CHAR}"
+    # 非人类形态：强调物种本体，禁止拟人化身体
+    species_note = (
+        f"。【重要】该角色的形态是{species}，必须按{species}的真实形态绘制"
+        f"（完整的动物/生物身体结构，四足着地或符合其物种的姿态），"
+        f"严禁画成人类身体、人形或拟人化站立"
+    )
+    return f"{head}{personality_str}{species_note}。外貌：{appearance}{STYLE_SUFFIX_CHAR_NONHUMAN}"
 
 
 def build_background_prompt(scene: dict) -> str:
@@ -169,16 +238,15 @@ def _defringe(img):
 
 # rembg session 单例（避免每次调用都重新初始化/下载模型，并发安全）
 _rembg_session = None
-_rembg_session_lock = None
+_rembg_session_lock = threading.Lock()
+# 推理锁：Numba workqueue 层不支持多线程并发调用，必须串行化 rembg 推理
+_rembg_infer_lock = threading.Lock()
 
 def _get_rembg_session():
     """lazy 初始化 rembg session（线程安全单例）"""
-    global _rembg_session, _rembg_session_lock
+    global _rembg_session
     if _rembg_session is not None:
         return _rembg_session
-    if _rembg_session_lock is None:
-        import threading
-        _rembg_session_lock = threading.Lock()
     with _rembg_session_lock:
         if _rembg_session is None:
             from rembg import new_session
@@ -198,15 +266,16 @@ def remove_background(image_path: Path) -> bool:
 
         session = _get_rembg_session()
         img = Image.open(image_path)
-        result = remove(
-            img,
-            session=session,
-            post_process_mask=True,
-            alpha_matting=True,
-            alpha_matting_foreground_threshold=240,
-            alpha_matting_background_threshold=10,
-            alpha_matting_erode_size=15,
-        )
+        with _rembg_infer_lock:  # 串行化推理，防止 Numba 并发崩溃
+            result = remove(
+                img,
+                session=session,
+                post_process_mask=True,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=240,
+                alpha_matting_background_threshold=10,
+                alpha_matting_erode_size=15,
+            )
         result = result.convert("RGBA")
         # 1) 色度键：将误判为前景的纯绿色像素直接透明化
         result = _chroma_key(result)
@@ -225,14 +294,30 @@ class ImageGenerator:
     """OpenAI 兼容的生图客户端（带磁盘缓存与无 key 回退）"""
 
     def __init__(self):
-        self.api_key = os.environ.get("IMAGE_API_KEY", "").strip()
-        base_url = os.environ.get("IMAGE_BASE_URL", "").strip()
+        _settings = _get_settings_safe()
+        self.api_key = (
+            _settings.image_api_key.strip() if _settings
+            else os.environ.get("IMAGE_API_KEY", "").strip()
+        )
+        base_url = (
+            _settings.image_base_url.strip() if _settings
+            else os.environ.get("IMAGE_BASE_URL", "").strip()
+        )
         self.base_url = base_url or None
-        self.model = os.environ.get("IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell").strip()
+        self.model = (
+            _settings.image_model.strip() if _settings
+            else os.environ.get("IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell").strip()
+        )
         # 可选：画质（hd/standard，空则用模型默认）
-        self.quality = os.environ.get("IMAGE_QUALITY", "").strip()
+        self.quality = (
+            _settings.image_quality.strip() if _settings
+            else os.environ.get("IMAGE_QUALITY", "").strip()
+        )
         # 可选：水印开关（仅部分服务商支持，如智谱需先签免责声明才能关）；空则不传、用服务商默认
-        wm = os.environ.get("IMAGE_WATERMARK", "").strip().lower()
+        wm = (
+            _settings.image_watermark.strip().lower() if _settings
+            else os.environ.get("IMAGE_WATERMARK", "").strip().lower()
+        )
         self.watermark_enabled = None
         if wm in ("false", "0", "off", "no"):
             self.watermark_enabled = False
@@ -260,6 +345,34 @@ class ImageGenerator:
         d.mkdir(parents=True, exist_ok=True)
         return d / f"{kind}_{safe_id}_{h}.png"
 
+    def _find_external_asset(self, script_slug: str, kind: str, asset_id: str) -> Path | None:
+        """在缓存目录中查找外部提供的素材文件（非标准哈希命名）。
+        匹配规则：文件名包含 asset_id 的 .png 文件（排除标准缓存格式）。
+        用于支持用户手动替换/补充的图片素材。"""
+        d = IMAGES_DIR / script_slug
+        if not d.is_dir():
+            return None
+        safe_id = re.sub(r"[^\w\u4e00-\u9fff]+", "_", str(asset_id or "x")).strip("_") or "x"
+        safe_id_norm = safe_id.replace("_", "").lower()  # 去下划线版本，用于模糊匹配
+        # 标准缓存格式: {kind}_{safe_id}_{8位hex}.png — 排除这些
+        cache_pattern = re.compile(rf"^{re.escape(kind)}_{re.escape(safe_id)}_[0-9a-f]{{8}}\.png$")
+        candidates: list[Path] = []
+        for f in d.iterdir():
+            if not f.is_file() or f.suffix.lower() != ".png":
+                continue
+            if cache_pattern.match(f.name):
+                continue  # 跳过标准缓存文件
+            # 匹配：文件名中包含 asset_id（如 "scene_01" 或 "einstein"）
+            # 同时支持去下划线模糊匹配（de_broglie → debroglie）
+            stem_norm = f.stem.replace("_", "").lower()
+            if safe_id in f.stem or safe_id_norm in stem_norm:
+                candidates.append(f)
+        if not candidates:
+            return None
+        # 多个候选时按文件名排序取第一个（确定性）
+        candidates.sort(key=lambda p: p.name)
+        return candidates[0]
+
     def generate(self, script_slug: str, kind: str, asset_id: str, prompt: str, size: str) -> str | None:
         """
         生成图片并缓存到磁盘。
@@ -280,12 +393,22 @@ class ImageGenerator:
                     if not _has_alpha:
                         print(f"[image_gen] 缓存命中但无透明通道，补跑 rembg: {path.name}", flush=True)
                         remove_background(path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("[image_gen] 缓存透明通道检查失败 (%s): %s", path.name, e)
             return rel_url
+
+        # 标准缓存未命中 → 尝试查找外部提供的素材（用户手动替换的图片）
+        ext_path = self._find_external_asset(script_slug, kind, asset_id)
+        if ext_path and ext_path.stat().st_size > 0:
+            ext_url = f"/generated_images/{script_slug}/{ext_path.name}"
+            print(f"[image_gen] 使用外部素材: {ext_path.name} (for {kind}/{asset_id})", flush=True)
+            return ext_url
 
         if not self.enabled:
             return None
+
+        # 交错延迟：避免多线程同时请求触发 API IPM 限制
+        _img_stagger()
 
         kwargs = dict(model=self.model, prompt=prompt, size=size, n=1)
         if self.quality:
@@ -296,13 +419,14 @@ class ImageGenerator:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
-        # 网络瞬时故障（连接失败/超时）自动重试，提升弱网环境成功率
+        # 可重试异常：连接故障 + 速率限制（429 IPM）
         try:
-            from openai import APIConnectionError, APITimeoutError
+            from openai import APIConnectionError, APITimeoutError, RateLimitError
             retryable = (APIConnectionError, APITimeoutError)
         except Exception:  # pragma: no cover
+            RateLimitError = None
             retryable = ()
-        max_attempts = 3
+        max_attempts = 4
         last_err = None
         for attempt in range(1, max_attempts + 1):
             try:
@@ -330,11 +454,18 @@ class ImageGenerator:
             except retryable as e:
                 last_err = e
                 if attempt < max_attempts:
-                    wait = attempt * 2
+                    wait = attempt * 3
                     print(f"[image_gen] {kind}/{asset_id} 连接异常，{wait}s 后重试({attempt}/{max_attempts}): {e}", flush=True)
                     time.sleep(wait)
                     continue
             except Exception as e:
+                # 429 速率限制：指数退避重试
+                if RateLimitError and isinstance(e, RateLimitError) and attempt < max_attempts:
+                    last_err = e
+                    wait = attempt * 15  # 15s, 30s, 45s
+                    print(f"[image_gen] {kind}/{asset_id} 触发速率限制，{wait}s 后重试({attempt}/{max_attempts})", flush=True)
+                    time.sleep(wait)
+                    continue
                 last_err = e
                 break
 
@@ -343,6 +474,6 @@ class ImageGenerator:
         try:
             with open(IMAGES_DIR / "error.log", "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[image_gen] error.log 写入失败: %s", e)
         return None

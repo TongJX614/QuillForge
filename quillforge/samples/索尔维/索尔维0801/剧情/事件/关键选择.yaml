@@ -1,0 +1,338 @@
+# 关键选择
+# 定义影响世界线和结局的关键抉择点
+# 选择数量不限，按剧情需要自由增减，每个选择按以下结构填写
+
+choices:
+  - id: "choice_01"
+    scene_id: "scene_03"
+    prompt: "茶歇时间，你选择走向哪个群体？"
+    description: "会议厅走廊里，两个阵营已经自然分化。你的第一次'选边'——虽然这不会锁死后续路线，但会影响初始关系走向。"
+
+    options:
+      - id: "c01_a"
+        text: "走向玻尔、海森堡、泡利那一组（哥本哈根阵营）"
+        description: "加入'新物理学'的讨论，表达对量子力学正统诠释的兴趣"
+        consequences:
+          immediate: "海森堡热情地拉你加入讨论，泡利打量你一眼"
+          delayed: "爱因斯坦在远处看到你，微微点头但目光中有一丝失望"
+          stats_changes:
+            copenhagen_affinity: +15
+            realism_affinity: -5
+        personality_impact: "展现对'新范式'的开放态度"
+        relationship_changes:
+          - character: "heisenberg"
+            change: +10
+            reason: "老朋友加入自己的阵营"
+          - character: "bohr"
+            change: +8
+            reason: "昔日学生站在自己这边"
+          - character: "einstein"
+            change: -5
+            reason: "本可争取的年轻人走向了对手"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c01_b"
+        text: "走向爱因斯坦、薛定谔、埃伦费斯特那一组（实在论阵营）"
+        description: "加入对量子力学完备性的质疑，表达对经典物理直觉的尊重"
+        consequences:
+          immediate: "爱因斯坦微笑着拍拍身边的椅子：'坐，年轻人。'"
+          delayed: "海森堡在远处看到，表情复杂"
+          stats_changes:
+            copenhagen_affinity: -5
+            realism_affinity: +15
+        personality_impact: "展现对'确定性'和'可理解性'的追求"
+        relationship_changes:
+          - character: "einstein"
+            change: +12
+            reason: "年轻人主动靠近，愿意倾听"
+          - character: "schrodinger"
+            change: +8
+            reason: "多了一个听众"
+          - character: "heisenberg"
+            change: -8
+            reason: "老朋友'叛变'到对手阵营"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c01_c"
+        text: "走向独自站在角落的德布罗意（第三条道路）"
+        description: "关心被两大阵营忽视的'导航波'理论家"
+        consequences:
+          immediate: "德布罗意惊讶而感激：'你……你愿意听我说说导航波？'"
+          delayed: "泡利在远处冷笑，海森堡困惑地挠头"
+          stats_changes:
+            copenhagen_affinity: -3
+            realism_affinity: +3
+            independence: +10
+        personality_impact: "展现独立精神和对'失败者'的同情"
+        relationship_changes:
+          - character: "de_broglie"
+            change: +15
+            reason: "在所有人忽视他时，你走向了他"
+          - character: "pauli"
+            change: -5
+            reason: "泡利认为你在浪费时间"
+          - character: "einstein"
+            change: +5
+            reason: "爱因斯坦欣赏对导航波的支持"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c01_d"
+        text: "走向狄拉克，沉默地站在他旁边（拒绝选边）"
+        description: "不参与任何阵营，保持完全的独立"
+        consequences:
+          immediate: "狄拉克看了你一眼，点了点头。你们一起沉默了五分钟。"
+          delayed: "两个阵营都注意到你的'不选边'，对你产生好奇"
+          stats_changes:
+            copenhagen_affinity: 0
+            realism_affinity: 0
+            independence: +15
+        personality_impact: "展现超然和独立思考"
+        relationship_changes:
+          - character: "dirac"
+            change: +10
+            reason: "你理解了他的沉默"
+          - character: "einstein"
+            change: +3
+            reason: "欣赏独立性"
+          - character: "bohr"
+            change: +3
+            reason: "欣赏独立性"
+        leads_to_ending: null
+        unlock_conditions: []
+
+  - id: "choice_02"
+    scene_id: "scene_05"
+    prompt: "德布罗意被泡利击溃后，午餐时你选择坐在谁身边？"
+    description: "这是一个关于'胜利者vs失败者'的选择。在学术争论中，你如何对待被击败的一方？"
+
+    options:
+      - id: "c02_a"
+        text: "和海森堡一起庆祝'哥本哈根的胜利'"
+        description: "加入胜利者的欢庆，认同逻辑的力量"
+        consequences:
+          immediate: "海森堡大笑着拍你的背：'看到了吧！这就是科学！'"
+          delayed: "德布罗意在角落看到你们，低下头"
+          stats_changes:
+            copenhagen_affinity: +10
+            empathy: -5
+        personality_impact: "展现对'逻辑胜利'的认同"
+        relationship_changes:
+          - character: "heisenberg"
+            change: +8
+            reason: "一起庆祝胜利"
+          - character: "pauli"
+            change: +5
+            reason: "认可他的论证"
+          - character: "de_broglie"
+            change: -10
+            reason: "在他最脆弱时加入了'嘲笑者'"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c02_b"
+        text: "端着盘子走向德布罗意，坐在他身边"
+        description: "在失败者身边表示支持，展现同理心"
+        consequences:
+          immediate: "德布罗意抬起头，眼中有惊讶和感激：'你不必……'你说：'我想听您再讲讲导航波。'"
+          delayed: "海森堡困惑地看着你，泡利冷哼一声"
+          stats_changes:
+            copenhagen_affinity: -5
+            empathy: +15
+            independence: +5
+        personality_impact: "展现对失败者的尊重和对'少数派'的同情"
+        relationship_changes:
+          - character: "de_broglie"
+            change: +20
+            reason: "在所有人抛弃他时，你坐在了他身边"
+          - character: "einstein"
+            change: +10
+            reason: "欣赏你的品格"
+          - character: "heisenberg"
+            change: -5
+            reason: "不理解你为什么同情'错误的一方'"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c02_c"
+        text: "观察爱因斯坦对德布罗意说了什么"
+        description: "保持距离，关注爱因斯坦的反应"
+        consequences:
+          immediate: "你看见爱因斯坦低声对德布罗意说：'路易，不要放弃。你的想法太美了，不会就这样死去。'"
+          delayed: "这句话在你心中种下一颗种子"
+          stats_changes:
+            independence: +8
+            insight: +10
+        personality_impact: "展现观察力和耐心"
+        relationship_changes:
+          - character: "einstein"
+            change: +5
+            reason: "你注意到了他的宽厚"
+        leads_to_ending: null
+        unlock_conditions: []
+
+  - id: "choice_03"
+    scene_id: "scene_07"
+    prompt: "爱因斯坦问你：'你觉得呢？上帝掷骰子吗？'这是你的核心立场选择。"
+    description: "这是整个游戏最核心的选择。它不会'锁死'结局，但会强烈影响最终走向。你也可以选择拒绝选择。"
+
+    options:
+      - id: "c03_a"
+        text: "'不。上帝不掷骰子。我相信世界是确定的、可理解的。'"
+        description: "站在爱因斯坦一边，选择实在论"
+        consequences:
+          immediate: "爱因斯坦的眼睛亮了：'好！好！你看到了！'他激动地在纸上画了一个公式。"
+          delayed: "玻尔后来得知你的立场，沉默了很久，然后说：'他有权这么想。但我不同意。'"
+          stats_changes:
+            realism_affinity: +25
+            copenhagen_affinity: -15
+        personality_impact: "选择理性主义的信仰——宇宙是完全可理解的"
+        relationship_changes:
+          - character: "einstein"
+            change: +20
+            reason: "你接受了他最核心的信念"
+          - character: "schrodinger"
+            change: +10
+            reason: "多了一个盟友"
+          - character: "bohr"
+            change: -10
+            reason: "失望，但尊重"
+          - character: "heisenberg"
+            change: -12
+            reason: "感到被老朋友'背叛'"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c03_b"
+        text: "'也许……上帝确实在掷骰子。我们必须接受不确定性。'"
+        description: "站在玻尔一边，选择哥本哈根诠释"
+        consequences:
+          immediate: "爱因斯坦的微笑凝固了一瞬，然后他轻声说：'你太年轻了。'但他没有生气——只是悲伤。"
+          delayed: "玻尔得知后，用他标志性的方式说：'你看……我就知道……不，让我重新说……我很高兴。'"
+          stats_changes:
+            copenhagen_affinity: +25
+            realism_affinity: -15
+        personality_impact: "选择接受新范式——放弃经典直觉，拥抱概率"
+        relationship_changes:
+          - character: "bohr"
+            change: +20
+            reason: "你接受了他最核心的信念"
+          - character: "heisenberg"
+            change: +15
+            reason: "老朋友'回来了'"
+          - character: "einstein"
+            change: -10
+            reason: "失望，但不怨恨——'你太年轻了'"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c03_c"
+        text: "'我不知道。也许这个问题本身就没有答案——而这没关系。'"
+        description: "拒绝选择，接受'不确定性'本身"
+        consequences:
+          immediate: "爱因斯坦沉默了很久。然后他笑了——不是嘲讽，而是一种复杂的、带着悲伤的笑：'你知道吗，也许你是对的。也许我才是那个无法接受不确定性的人。'"
+          delayed: "玻尔后来说：'这是最互补的回答。'"
+          stats_changes:
+            realism_affinity: +5
+            copenhagen_affinity: +5
+            independence: +20
+            wisdom: +15
+        personality_impact: "超越二元对立，达到更高层次的理解"
+        relationship_changes:
+          - character: "einstein"
+            change: +8
+            reason: "你的诚实让他反思"
+          - character: "bohr"
+            change: +12
+            reason: "你的回答暗合互补性精神"
+          - character: "ehrenfest"
+            change: +15
+            reason: "你理解了他作为'中间人'的痛苦"
+        leads_to_ending: null
+        unlock_conditions: []
+
+      - id: "c03_d"
+        text: "'教授，您是不是害怕自己错了？'（需要好感度≥70）"
+        description: "直面爱因斯坦的内心恐惧——他害怕自己像洛伦兹一样'老了'"
+        consequences:
+          immediate: "房间陷入死寂。爱因斯坦放下笔，看着你。很久。然后他轻声说：'是的。我怕。我怕自己变成了那个说'年轻人不懂'的老人。但我更怕的是——如果我真的错了，那意味着宇宙比我想象的更陌生。我不确定我能接受一个陌生的宇宙。'"
+          delayed: "这是爱因斯坦第一次对任何人承认恐惧。埃伦费斯特在门外听到，悄悄擦了一下眼睛。"
+          stats_changes:
+            independence: +10
+            wisdom: +20
+            intimacy_einstein: +25
+        personality_impact: "展现直面真相的勇气和深刻的同理心"
+        relationship_changes:
+          - character: "einstein"
+            change: +25
+            reason: "你是第一个让他承认恐惧的人"
+          - character: "ehrenfest"
+            change: +10
+            reason: "你做到了他做不到的事——让爱因斯坦卸下盔甲"
+        leads_to_ending: null
+        unlock_conditions:
+          - "einstein好感度≥70"
+
+  - id: "choice_final"
+    scene_id: "scene_09"
+    prompt: "火车启动，你合上笔记本。这六天改变了你什么？"
+    description: "最终选择。结合全程积累的属性值，触发对应结局。"
+
+    options:
+      - id: "cf_a"
+        text: "你确信：量子力学是完备的。不确定性是自然的最终语言。"
+        description: "完全接受哥本哈根诠释"
+        consequences:
+          immediate: "你望向窗外，感到一种奇异的自由——不再需要'确定性'的自由"
+          delayed: "触发结局判定"
+          stats_changes:
+            copenhagen_affinity: +10
+        personality_impact: "成为新范式的信徒"
+        relationship_changes: []
+        leads_to_ending: "ending_copenhagen"
+        unlock_conditions:
+          - "copenhagen_affinity≥60"
+
+      - id: "cf_b"
+        text: "你确信：爱因斯坦是对的。这个世界不应建立在概率之上。"
+        description: "完全接受实在论"
+        consequences:
+          immediate: "你望向窗外，心中有一种孤独的坚定——与主流对抗的坚定"
+          delayed: "触发结局判定"
+          stats_changes:
+            realism_affinity: +10
+        personality_impact: "成为少数派的坚守者"
+        relationship_changes: []
+        leads_to_ending: "ending_realism"
+        unlock_conditions:
+          - "realism_affinity≥60"
+
+      - id: "cf_c"
+        text: "你不确定。但你确定的是：追问本身比答案更珍贵。"
+        description: "超越二元对立"
+        consequences:
+          immediate: "你望向窗外，微笑了。笔记本上写满了问题，而不是答案。"
+          delayed: "触发结局判定"
+          stats_changes:
+            wisdom: +10
+        personality_impact: "达到更高层次的理解"
+        relationship_changes: []
+        leads_to_ending: "ending_transcend"
+        unlock_conditions:
+          - "wisdom≥40且independence≥40"
+
+      - id: "cf_d"
+        text: "你打开笔记本，开始写一封信：'亲爱的洛伦兹教授……'"
+        description: "将这段经历献给即将离去的老人"
+        consequences:
+          immediate: "你在火车上写完了这封信。你不知道该寄往哪里——但你还是写了。"
+          delayed: "触发结局判定"
+          stats_changes:
+            empathy: +10
+        personality_impact: "选择记住人，而非记住理论"
+        relationship_changes: []
+        leads_to_ending: "ending_lorentz"
+        unlock_conditions:
+          - "lorentz好感度≥80"

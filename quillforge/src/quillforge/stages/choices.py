@@ -8,12 +8,22 @@ Stage 4: Choice Branching — 选择分支
 
 from __future__ import annotations
 
+import json
+import sys
+from pathlib import Path
 from typing import Generator
 
+_SRC_DIR = str(Path(__file__).resolve().parent.parent.parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from logger import get_logger
 from schemas import HarnessInput, AssembledContext, Dialogue, Choice
 from ..fixtures import PreparedContext
 from ..sut import NarrativeSUT
 from .base import StageBase
+
+logger = get_logger("stage.choices")
 
 
 class ChoicesStage(StageBase):
@@ -45,9 +55,9 @@ class ChoicesStage(StageBase):
         dialogues = dialogues or []
 
         # 剧本预设选项跳过
-        if extra.get("_hasScriptChoices"):
-            print(f"[Stage 4/5] 选择分支 (跳过：剧本已定义选项)")
-            script_choices_raw = extra.get("_scriptChoices", [])
+        if self._extra_get(extra, "_hasScriptChoices"):
+            logger.info("[Stage 4/5] 选择分支 (跳过：剧本已定义选项)")
+            script_choices_raw = self._extra_get(extra, "_scriptChoices", [])
             return [
                 Choice(
                     text=c.get("text", ""),
@@ -62,8 +72,8 @@ class ChoicesStage(StageBase):
 
         try:
             raw_choices = sut.call_json(ctx.rendered_system_prompt, user_prompt)
-        except (ValueError, Exception) as e:
-            print(f"  [CHOICES] LLM JSON 解析失败: {e}")
+        except (ValueError, json.JSONDecodeError, KeyError) as e:
+            logger.info("  [CHOICES] LLM JSON 解析失败: %s", e)
             return choices
 
         if isinstance(raw_choices, list):
@@ -101,29 +111,13 @@ class ChoicesStage(StageBase):
         sut: NarrativeSUT,
     ) -> str:
         """构建选择分支的 user prompt"""
-        variables = {
+        variables = self._common_variables(extra)
+        variables.update({
             "narration": narration,
             "dialogues": [d.to_dict() for d in dialogues],
             "worldline": assembled.raw_worldline,
             "currentNode": assembled.current_node,
             "nextNode": assembled.next_node or "（终局）",
             "worldlineProgress": int(assembled.worldline_progress * 100),
-            "choiceHistory": extra.get("_choiceHistory", ""),
-            # 剧本全局上下文
-            "keyChoices": extra.get("_keyChoices", ""),
-            "endings": extra.get("_endings", ""),
-            "coreConflict": extra.get("_coreConflict", ""),
-            "sceneDetails": extra.get("_sceneDetails", ""),
-            "worldlines": extra.get("_worldlines", ""),
-            "events": extra.get("_events", ""),
-            "themes": extra.get("_themes", ""),
-            "worldbookRules": extra.get("_worldbook", ""),
-            "plotSummary": extra.get("_plotSummary", ""),
-            "relationshipNetwork": extra.get("_relationshipNetwork", ""),
-            "stagesOverview": extra.get("_stagesOverview", ""),
-            # 当前场景专属剧情上下文
-            "currentStageContext": extra.get("_currentStageContext", ""),
-            "sceneBeats": extra.get("_sceneBeats", ""),
-            "sceneHooks": extra.get("_sceneHooks", ""),
-        }
+        })
         return sut.render_template(sut.prompts["choices"], variables)

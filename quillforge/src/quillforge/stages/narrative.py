@@ -65,7 +65,8 @@ class NarrativeStage(StageBase):
         sut: NarrativeSUT,
     ) -> str:
         """构建旁白生成的 user prompt"""
-        variables = {
+        variables = self._common_variables(extra)
+        variables.update({
             "worldline": assembled.raw_worldline,
             "annotatedWorldline": assembled.annotated_worldline,
             "currentNode": assembled.current_node,
@@ -78,24 +79,7 @@ class NarrativeStage(StageBase):
             "characters": assembled.active_characters,
             "playerDecision": assembled.player_decision,
             "previousNarration": inp.previous_context.narration if inp.previous_context else "",
-            "choiceHistory": extra.get("_choiceHistory", ""),
-            # 剧本全局上下文
-            "stagesOverview": extra.get("_stagesOverview", ""),
-            "events": extra.get("_events", ""),
-            "coreConflict": extra.get("_coreConflict", ""),
-            "plotSummary": extra.get("_plotSummary", ""),
-            "sceneDetails": extra.get("_sceneDetails", ""),
-            "worldlines": extra.get("_worldlines", ""),
-            "endings": extra.get("_endings", ""),
-            "keyChoices": extra.get("_keyChoices", ""),
-            "relationshipNetwork": extra.get("_relationshipNetwork", ""),
-            "themes": extra.get("_themes", ""),
-            "worldbookRules": extra.get("_worldbook", ""),
-            # 当前场景专属剧情上下文
-            "currentStageContext": extra.get("_currentStageContext", ""),
-            "sceneBeats": extra.get("_sceneBeats", ""),
-            "sceneHooks": extra.get("_sceneHooks", ""),
-        }
+        })
         return sut.render_template(sut.prompts["narration"], variables)
 
     @staticmethod

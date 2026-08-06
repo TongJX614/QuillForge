@@ -1,0 +1,298 @@
+# 角色关系
+# 定义角色之间的关系网络和动态变化规则
+# 所有列表条目数量不限，按剧情需要自由增减
+
+# ============================================================
+# 关系定义（覆盖所有重要角色对，数量不限）
+# ============================================================
+relationships:
+  - source: "einstein"
+    target: "bohr"
+    type: "最尊敬的对手"
+    description: |
+      物理学史上最伟大的学术论战。爱因斯坦视玻尔为唯一配得上与自己辩论的人，
+      玻尔视爱因斯坦的质疑为推动自己思考深化的最大动力。
+      他们的分歧不是敌意，而是两种世界观的碰撞：
+      爱因斯坦相信"上帝不掷骰子"——宇宙是确定的、可理解的；
+      玻尔相信"不要告诉上帝该怎么做"——我们必须接受自然告诉我们的。
+      他们互相深爱，但绝不可能在核心问题上妥协。
+    initial_level: 72
+    dynamic: true
+    development:
+      - trigger: "爱因斯坦在全体讨论中提出'超距作用'难题"
+        change: "玻尔被迫彻夜思考，关系中的张力达到峰值"
+        scene: "scene_03"
+      - trigger: "玩家选择支持某一方"
+        change: "被支持方对玩家好感上升，另一方感到失望但不怨恨"
+        scene: "scene_05"
+      - trigger: "会议最后一天"
+        change: "双方互相表达敬意，承认争论将继续"
+        scene: "scene_08"
+
+  - source: "einstein"
+    target: "curie"
+    type: "深厚友谊"
+    description: |
+      自1911年第一届索尔维会议起的友谊。爱因斯坦曾与居里夫妇一家在瑞士度假。
+      他称她为"居里夫人，您是我见过的最诚实的人"。
+      在1927年的争论中，居里夫人保持中立，但私下常与爱因斯坦散步交谈。
+      她是少数能让爱因斯坦暂时放下"量子之争"、谈论音乐和人生的人。
+    initial_level: 85
+    dynamic: false
+    development:
+      - trigger: "会议间隙的散步对话"
+        change: "友谊加深，爱因斯坦向居里夫人倾诉对量子力学的困惑"
+        scene: "scene_04"
+
+  - source: "einstein"
+    target: "schrodinger"
+    type: "精神盟友"
+    description: |
+      在反对量子力学概率诠释上立场一致，经常通信讨论。
+      但出发点不同：爱因斯坦追求"完备性"，薛定谔追求"连续性"。
+      薛定谔后来发展出的"猫悖论"正是受爱因斯坦启发。
+      他们的联盟是"反哥本哈根统一战线"，但内部并非铁板一块。
+    initial_level: 78
+    dynamic: true
+    development:
+      - trigger: "薛定谔在会议上被边缘化"
+        change: "爱因斯坦试图为其争取发言机会"
+        scene: "scene_05"
+      - trigger: "会议后的通信"
+        change: "爱因斯坦启发薛定谔构思'猫悖论'"
+        scene: "scene_09"
+
+  - source: "einstein"
+    target: "lorentz"
+    type: "精神之父"
+    description: |
+      洛伦兹的变换方程为狭义相对论铺路，爱因斯坦终身视其为恩人。
+      洛伦兹是爱因斯坦在学术界最信任的长辈，也是唯一能让他"听话"的人。
+      当洛伦兹说"阿尔伯特，给玻尔一个回应的机会"时，爱因斯坦会笑着坐下。
+    initial_level: 92
+    dynamic: false
+    development:
+      - trigger: "洛伦兹在会议上的公正主持"
+        change: "爱因斯坦对洛伦兹的敬爱更深"
+        scene: "scene_03"
+
+  - source: "einstein"
+    target: "heisenberg"
+    type: "才华横溢的'迷途者'"
+    description: |
+      爱因斯坦欣赏海森堡的才华，但认为其哲学立场"幼稚"。
+      他曾对海森堡说："你相信只有可观测量才应出现在理论中——
+      但你知道吗，正是我教会了全世界这么做的。现在我告诉你，这不够。"
+      海森堡对爱因斯坦有复杂的敬畏：渴望得到认可，又必须反对他。
+    initial_level: 45
+    dynamic: true
+    development:
+      - trigger: "海森堡在会议上做不确定性原理报告"
+        change: "爱因斯坦认真倾听但摇头"
+        scene: "scene_03"
+      - trigger: "私下对话"
+        change: "爱因斯坦试图'争取'海森堡，海森堡礼貌但坚定地拒绝"
+        scene: "scene_06"
+
+  - source: "bohr"
+    target: "heisenberg"
+    type: "学术父子"
+    description: |
+      玻尔视海森堡为自己思想的继承者，海森堡视玻尔为精神导师。
+      但关系中有张力：玻尔批评海森堡对不确定性的"粗糙"解释，
+      海森堡有时想挣脱玻尔的影响独立发声。
+      在1927年会议上，玻尔甚至"严厉批评"了海森堡的论证方式，
+      这让海森堡很受伤，但最终接受了修正。
+    initial_level: 82
+    dynamic: true
+    development:
+      - trigger: "玻尔批评海森堡的不确定性论证"
+        change: "海森堡受伤但反思，关系短暂紧张"
+        scene: "scene_03"
+      - trigger: "海森堡接受修正后的论证"
+        change: "关系恢复，海森堡更成熟"
+        scene: "scene_06"
+
+  - source: "heisenberg"
+    target: "pauli"
+    type: "毒舌兄弟"
+    description: |
+      物理学界最著名的"损友"组合。互相嘲讽但绝对信任。
+      泡利："维尔纳，你的数学还是那么糟糕。"
+      海森堡："沃尔夫冈，你的社交能力还是那么糟糕。"
+      他们一起登山、一起弹钢琴、一起"屠杀"不严谨的论文。
+      在量子力学诠释问题上，他们是铁杆盟友。
+    initial_level: 92
+    dynamic: false
+    development:
+      - trigger: "泡利用非弹性散射问题击溃德布罗意"
+        change: "海森堡在旁边偷笑，事后一起喝啤酒庆祝"
+        scene: "scene_05"
+
+  - source: "pauli"
+    target: "de_broglie"
+    type: "学术'处刑人'"
+    description: |
+      泡利在会议前就准备好了对导航波理论的致命一击：
+      非弹性散射问题——如果导航波理论正确，它应该能解释
+      粒子碰撞后能量交换的统计分布，但它做不到。
+      德布罗意在会议上被这个问题问倒，无法给出令人信服的回答。
+      这不是恶意——泡利真心认为导航波理论是"糊涂思想"。
+    initial_level: 20
+    dynamic: true
+    development:
+      - trigger: "德布罗意在会议上做导航波报告"
+        change: "泡利举手提问，全场屏息"
+        scene: "scene_05"
+      - trigger: "德布罗意无法回答"
+        change: "德布罗意信心崩溃，导航波理论被搁置"
+        scene: "scene_05"
+
+  - source: "einstein"
+    target: "de_broglie"
+    type: "被赏识的后辈"
+    description: |
+      爱因斯坦是德布罗意物质波假说的最早支持者，
+      称其论文"揭开了巨大帷幕的一角"。
+      在1927年会议上，爱因斯坦公开表示导航波方向"值得追求"。
+      但爱因斯坦的支持未能挽救德布罗意——泡利的攻击太致命了。
+    initial_level: 70
+    dynamic: true
+    development:
+      - trigger: "爱因斯坦在讨论中支持导航波方向"
+        change: "德布罗意短暂获得信心"
+        scene: "scene_05"
+      - trigger: "泡利击溃导航波后"
+        change: "爱因斯坦的支持变得无力"
+        scene: "scene_05"
+
+  - source: "ehrenfest"
+    target: "einstein"
+    type: "最亲密的朋友"
+    description: |
+      多年密友，爱因斯坦最信任的倾诉对象。
+      埃伦费斯特是爱因斯坦和玻尔之间的"翻译者"——
+      他能同时理解双方的立场，并试图让他们真正"听见"对方。
+      1932年爱因斯坦写给埃伦费斯特的信预见了EPR的核心思路。
+    initial_level: 90
+    dynamic: false
+    development:
+      - trigger: "深夜私人谈话"
+        change: "爱因斯坦向埃伦费斯坦露对量子力学的深层困惑"
+        scene: "scene_07"
+
+  - source: "player"
+    target: "einstein"
+    type: "被争取的年轻人"
+    description: |
+      爱因斯坦视玩家为可以争取的年轻头脑。
+      他会用散步、小提琴和思想实验来"诱惑"玩家接受实在论。
+      如果玩家表现出独立思考和质疑精神，爱因斯坦的好感会大幅上升。
+    initial_level: 50
+    dynamic: true
+    development:
+      - trigger: "玩家在讨论中提出有深度的问题"
+        change: "爱因斯坦开始认真对待玩家"
+        scene: "scene_03"
+      - trigger: "玩家选择支持实在论"
+        change: "爱因斯坦视玩家为'自己人'"
+        scene: "scene_05"
+
+  - source: "player"
+    target: "bohr"
+    type: "昔日学生"
+    description: |
+      玩家曾在哥本哈根学习一年，玻尔视其为"自己人"。
+      但如果玩家最终选择反对哥本哈根诠释，玻尔会失望但不会怨恨——
+      "你的理论的疯狂程度还不够，但你的诚实让我尊重。"
+    initial_level: 60
+    dynamic: true
+    development:
+      - trigger: "玩家重提在哥本哈根的日子"
+        change: "玻尔感到亲切"
+        scene: "scene_02"
+      - trigger: "玩家选择反对哥本哈根"
+        change: "玻尔失望但尊重"
+        scene: "scene_05"
+
+  - source: "player"
+    target: "heisenberg"
+    type: "同辈友人"
+    description: |
+      在哥本哈根共事一年的老朋友。年龄相近，可以放松地交谈。
+      海森堡会拉玩家一起弹钢琴、喝啤酒、吐槽泡利的毒舌。
+      但如果玩家最终反对不确定性原理，友谊会受到考验。
+    initial_level: 68
+    dynamic: true
+    development:
+      - trigger: "重逢时的热情拥抱"
+        change: "友谊恢复"
+        scene: "scene_01"
+      - trigger: "玩家反对不确定性原理"
+        change: "海森堡受伤但试图理解"
+        scene: "scene_06"
+
+# ============================================================
+# 关系类型定义（根据剧本需要自定义，数量不限）
+# ============================================================
+relationship_types:
+  - id: "mentor"
+    name: "师生关系"
+    description: "学术传承与思想影响"
+    min_level: 0
+    max_level: 100
+  - id: "rival"
+    name: "学术对手"
+    description: "在核心问题上的根本分歧，但互相尊重"
+    min_level: 0
+    max_level: 100
+  - id: "ally"
+    name: "学术盟友"
+    description: "在核心问题上立场一致"
+    min_level: 0
+    max_level: 100
+  - id: "friend"
+    name: "私人友谊"
+    description: "超越学术的个人情感"
+    min_level: 0
+    max_level: 100
+  - id: "peer"
+    name: "同辈关系"
+    description: "年龄和资历相近的同事"
+    min_level: 0
+    max_level: 100
+
+# ============================================================
+# 关系变化规则（通用规则，适用于所有关系，数量不限）
+# ============================================================
+change_rules:
+  - rule_id: "rule_01"
+    description: "玩家在讨论中展现独立思考时，所有角色好感+5"
+    condition: "玩家在全体讨论中提出原创观点"
+    change: 5
+    max_level: 100
+    min_level: 0
+  - rule_id: "rule_02"
+    description: "玩家公开支持某一阵营时，该阵营成员好感+15，对立阵营-10"
+    condition: "玩家在关键选择中明确表态"
+    change: 15
+    max_level: 100
+    min_level: 0
+  - rule_id: "rule_03"
+    description: "玩家私下与某角色深度交谈时，该角色好感+8"
+    condition: "完成一次私人对话事件"
+    change: 8
+    max_level: 100
+    min_level: 0
+  - rule_id: "rule_04"
+    description: "玩家对某角色的论点提出有力反驳时，该角色好感-5但尊重+10"
+    condition: "在对话中选择'反驳'且论据充分"
+    change: -5
+    max_level: 100
+    min_level: 0
+  - rule_id: "rule_05"
+    description: "玩家在会议中保持沉默时，所有角色好感不变，但'神秘感'+3"
+    condition: "在讨论环节选择不发言"
+    change: 0
+    max_level: 100
+    min_level: 0

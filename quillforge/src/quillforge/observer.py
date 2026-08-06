@@ -10,6 +10,7 @@ Harness 编排器在关键节点通知观察者，不关心观察者如何处理
 
 from __future__ import annotations
 
+import time
 from abc import ABC
 from typing import Any, Optional
 
@@ -189,7 +190,6 @@ class MetricsObserver(HarnessObserver):
     """指标收集观察者：收集耗时、验证分数、重试次数等指标"""
 
     def __init__(self):
-        import time
         self._start_time: float = 0
         self._stage_start: float = 0
         self.metrics: dict = {
@@ -201,15 +201,12 @@ class MetricsObserver(HarnessObserver):
         }
 
     def on_run_start(self, input_data: Any) -> None:
-        import time
         self._start_time = time.time()
 
     def on_stage_start(self, stage_number: int, stage_name: str) -> None:
-        import time
         self._stage_start = time.time()
 
     def on_stage_complete(self, stage_number: int, result: Any) -> None:
-        import time
         elapsed = int((time.time() - self._stage_start) * 1000)
         self.metrics["stages"][stage_number] = {
             "name": stage_name if hasattr(self, '_current_name') else f"stage_{stage_number}",
@@ -226,7 +223,6 @@ class MetricsObserver(HarnessObserver):
         self.metrics["fallback_triggered"] = True
 
     def on_run_complete(self, output: dict) -> None:
-        import time
         self.metrics["total_elapsed_ms"] = output.get("metadata", {}).get("generationTime", 0)
 
     def get_metrics(self) -> dict:

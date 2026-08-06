@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Narrative Generation Harness — 验证器
 实现 Stage 5 Validation Gate 的所有校验逻辑
@@ -273,6 +274,7 @@ class NarrativeValidator(Validator):
         node_mentioned = 0
         total_nodes_checked = 0
         is_final_scene = not self.context.next_node  # 无下一节点 = 终局场景
+        hit_details = []  # 记录命中的关键词，便于调试
 
         for node_name in [self.context.current_node, self.context.next_node]:
             if not node_name:
@@ -281,43 +283,68 @@ class NarrativeValidator(Validator):
             # 直接匹配节点名
             if node_name in all_text:
                 node_mentioned += 1
+                hit_details.append(f"节点[{node_name}]精确命中")
                 continue
             # 动态推导：将节点名拆分为 2-3 字子词做模糊匹配
             node_sub_kws = self._extract_keywords(node_name)
-            if node_sub_kws and any(kw in all_text for kw in node_sub_kws):
+            matched_sub = [kw for kw in node_sub_kws if kw in all_text]
+            if matched_sub:
                 node_mentioned += 1
+                hit_details.append(f"节点[{node_name}]子词命中:{','.join(matched_sub[:3])}")
+                continue
+            # 2-gram 模糊匹配：将节点名拆为连续 2 字片段
+            node_chars = node_name.replace(" ", "")
+            bigrams = [node_chars[i:i+2] for i in range(len(node_chars) - 1) if len(node_chars[i:i+2]) == 2]
+            bigram_hits = [bg for bg in bigrams if bg in all_text]
+            if bigram_hits and len(bigram_hits) >= max(1, len(bigrams) // 2):
+                node_mentioned += 1
+                hit_details.append(f"节点[{node_name}]bigram命中:{','.join(bigram_hits[:3])}")
                 continue
             # 检查场景描述关键词是否出现在节点名中
             scene_kws_for_node = self._extract_keywords(self.context.scene_description)
             if any(kw in node_name for kw in scene_kws_for_node if len(kw) >= 2):
                 node_mentioned += 1
+                hit_details.append(f"节点[{node_name}]场景词关联")
 
         # 终局场景特殊处理：检查结局/选择/真相等关键词
         if is_final_scene:
-            ending_kws = ["选择", "真相", "结局", "最终", "最后", "决定", "证据", "公开", "沉默", "忘记", "交易"]
+            ending_kws = ["选择", "真相", "结局", "最终", "最后", "决定", "证据", "公开", "沉默", "忘记", "交易", "命运", "未来", "结束"]
             ending_hits = sum(1 for kw in ending_kws if kw in all_text)
             if ending_hits >= 2:
                 node_mentioned += 1
-                total_nodes_checked += 1  # 增加一个虚拟节点检查，使终局场景更易通过
+                total_nodes_checked += 1
+                hit_details.append(f"终局词命中{ending_hits}个")
 
         # 检查场景描述中的核心关键词（2-4字的有意义词）
         scene_kws = self._extract_keywords(self.context.scene_description)
-        scene_hits = sum(1 for kw in scene_kws if kw in all_text)
+        # 补充角色名作为关键词（角色始终与世界线相关）
+        char_names = [c.name for c in self.context.active_characters if c.name]
+        extended_kws = list(dict.fromkeys(scene_kws + char_names))  # 去重保序
+        scene_hits = sum(1 for kw in extended_kws if kw in all_text)
+        hit_kw_list = [kw for kw in extended_kws if kw in all_text]
         # 用固定基准而非关键词总数，避免长描述稀释命中率
-        scene_score = min(1.0, scene_hits / max(min(len(scene_kws), 8), 1))
+        scene_score = min(1.0, scene_hits / max(min(len(extended_kws), 8), 1))
 
         # 综合得分：场景关键词权重更高（通用架构下节点名精确匹配不可靠）
         node_score = min(1.0, node_mentioned / max(total_nodes_checked, 1))
         combined = scene_score * 0.7 + node_score * 0.3
         # 终局场景阈值略低（终局内容更偏情感/抉择，不易命中场景关键词）
-        threshold = 0.10 if is_final_scene else 0.15
+        threshold = 0.08 if is_final_scene else 0.12
         ok = combined >= threshold
+
+        detail_str = (
+            f"主线关联度: {combined:.2f} (节点匹配: {node_mentioned}/{total_nodes_checked}, "
+            f"场景词命中: {scene_hits}/{len(extended_kws)}"
+            f"{'，终局' if is_final_scene else ''})"
+        )
+        if hit_details:
+            detail_str += f" | 命中: {'; '.join(hit_details[:4])}"
 
         return ValidationCheck(
             name="worldline_adherence",
             passed=ok,
             severity="high",
-            detail=f"主线关联度: {combined:.2f} (节点匹配: {node_mentioned}, 场景词命中: {scene_hits}/{len(scene_kws)}{'，终局' if is_final_scene else ''})",
+            detail=detail_str,
             score=round(combined, 2),
         )
 

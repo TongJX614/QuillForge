@@ -129,10 +129,19 @@ quillforge/
 # 安装依赖
 pip install -r requirements.txt
 
-# 启动服务（默认端口 8766）
+# 启动服务（默认端口 8050）
 python server_start.py
 # 或
-python src/server.py --host 127.0.0.1 --port 8766
+python src/server.py --host 127.0.0.1 --port 8050
+
+# 运行全量测试
+pytest
+
+# 运行单个测试模块
+pytest quillforge/tests/test_validator.py
+
+# 运行单个测试函数
+pytest quillforge/tests/test_validator.py::test_function_name -v
 ```
 
 必需环境变量（`.env` 文件）：
@@ -191,6 +200,6 @@ Stage 5 (`ValidationStage`) 通过 `NarrativeValidator.validate_all()` 执行 8 
 
 ```
 @maintainer: QuillForge Team
-@last_reviewed: 2026-08-01
-@version: 1.1.0
+@last_reviewed: 2026-08-06
+@version: 1.2.0
 ```

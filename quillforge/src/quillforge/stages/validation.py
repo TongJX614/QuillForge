@@ -51,10 +51,10 @@ class ValidationStage(StageBase):
         dialogues = dialogues or []
         choices = choices or []
 
-        validator = self._get_validator(input_data)
+        validator = self._get_validator(input_data, ctx.assembled)
         return validator.validate_all(narration, dialogues, choices, retry_count=retry_count)
 
-    def _get_validator(self, input_data: HarnessInput):
+    def _get_validator(self, input_data: HarnessInput, assembled=None):
         """获取验证器实例（延迟创建，因为需要 input_data 的对话数量约束）"""
         if self._validator is not None:
             return self._validator
@@ -62,7 +62,7 @@ class ValidationStage(StageBase):
         # 默认使用 NarrativeValidator
         from validator import NarrativeValidator
         return NarrativeValidator(
-            context=None,  # 将在 execute 中设置
+            context=assembled,
             min_dialogues=input_data.options.dialogue_count_min,
             max_dialogues=input_data.options.dialogue_count_max,
         )

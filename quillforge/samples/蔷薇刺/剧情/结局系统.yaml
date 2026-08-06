@@ -1,9 +1,0 @@
-endings:
-- id: ending_good
-  type: good
-  title: 远行
-  trigger_conditions: []
-  narrative: 你握住江晚的手，掌心里传来一阵微凉的颤栗，像是她终于把全部的信任交到了你手上。佣人房的木门吱呀一声推开，夜风裹着蔷薇的香气扑面而来，月光在青石小径上铺成一条银白的路。你回头看了一眼那栋亮着昏黄灯光的别
-  epilogue: ''
-  replay_value: ''
-  unlock_conditions: ''

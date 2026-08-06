@@ -18,9 +18,16 @@ Harness 不包含任何业务逻辑：
 
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
 from typing import Optional, Generator
 
+_SRC_DIR = str(Path(__file__).resolve().parent.parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from logger import get_logger
 from schemas import (
     HarnessInput, HarnessOutput, AssembledContext,
     Dialogue, Choice, ValidationResult,
@@ -28,6 +35,8 @@ from schemas import (
 )
 from validator import NarrativeValidator
 from .sut import NarrativeSUT, load_config
+
+logger = get_logger("harness.core")
 from .stages.base import StageBase
 from .stages.context_assembly import ContextAssemblyStage
 from .stages.narrative import NarrativeStage
@@ -79,8 +88,10 @@ class Harness:
                 method(*args, **kwargs)
 
     @staticmethod
-    def _prepare_input(input_data: dict | HarnessInput) -> tuple[HarnessInput, dict]:
-        """提取额外上下文并构建 HarnessInput"""
+    def _prepare_input(input_data: dict | HarnessInput) -> tuple[HarnessInput, "ExtraContext"]:
+        """提取额外上下文并构建 HarnessInput，返回类型化的 ExtraContext"""
+        from extra_context import ExtraContext
+
         if isinstance(input_data, dict):
             extra = {k: v for k, v in input_data.items() if k.startswith("_")}
             harness_input = HarnessInput.from_dict(input_data)
@@ -91,7 +102,7 @@ class Harness:
         # 覆盖模型配置
         if harness_input.options.model:
             sut = None  # 由调用方处理
-        return harness_input, extra
+        return harness_input, ExtraContext.from_dict(extra)
 
     def _build_prepared_context(
         self,
@@ -107,6 +118,72 @@ class Harness:
             assembled=assembled,
             rendered_system_prompt=rendered_sys_prompt,
             extra=extra,
+        )
+
+    def _apply_fallback(
+        self,
+        ctx: PreparedContext,
+        harness_input: HarnessInput,
+        narration: str,
+        dialogues: list[Dialogue],
+        choices: list[Choice],
+        validation: Optional[ValidationResult],
+        max_retries: int,
+    ) -> tuple[list[Dialogue], ValidationResult]:
+        """公共 Fallback 逻辑：对话不足时启用三层保底，返回修正后的 (dialogues, validation)。"""
+        min_req = harness_input.options.dialogue_count_min
+        if len(dialogues) >= min_req:
+            return dialogues, validation
+
+        logger.info("  [FALLBACK] 对话不足 (%d/%d)，启用保底生成...", len(dialogues), min_req)
+        self._notify("on_fallback", {"reason": "dialogue_insufficient", "count": len(dialogues), "min": min_req})
+
+        state = HarnessState(
+            narration=narration,
+            dialogues=dialogues,
+            choices=choices,
+            validation=validation,
+        )
+        fallback_dialogues = self.fallback.execute(ctx.assembled, self.sut, state, min_required=min_req)
+        if len(fallback_dialogues) < min_req:
+            fallback_dialogues = self.fallback.hardcode_fallback(ctx.assembled, min_req)
+        if fallback_dialogues:
+            dialogues = fallback_dialogues
+            logger.info("  [FALLBACK] 保底生成 %d 轮对话", len(fallback_dialogues))
+
+        validator = NarrativeValidator(
+            ctx.assembled,
+            min_dialogues=min_req,
+            max_dialogues=harness_input.options.dialogue_count_max,
+        )
+        validation = validator.validate_all(narration, dialogues, choices, retry_count=max_retries + 1)
+        return dialogues, validation
+
+    def _build_output(
+        self,
+        ctx: PreparedContext,
+        narration: str,
+        dialogues: list[Dialogue],
+        choices: list[Choice],
+        validation: Optional[ValidationResult],
+        start_time: float,
+    ) -> HarnessOutput:
+        """公共输出构建：组装 HarnessOutput。"""
+        elapsed = int((time.time() - start_time) * 1000)
+        worldline_state = {
+            "currentNode": ctx.assembled.current_node,
+            "nodeIndex": ctx.assembled.node_index,
+            "totalNodes": ctx.assembled.total_nodes,
+            "progress": round(ctx.assembled.worldline_progress, 2),
+        }
+        return HarnessOutput(
+            success=validation.passed if validation else False,
+            narration=narration,
+            dialogues=dialogues,
+            next_choices=choices,
+            worldline_state=worldline_state,
+            validation=validation or ValidationResult(passed=False, checks=[]),
+            metadata={"generationTime": elapsed, "model": self.sut.llm.model},
         )
 
     def run(self, input_data: dict | HarnessInput) -> dict:
@@ -129,7 +206,7 @@ class Harness:
 
         # ── 2. Stage 1: Context Assembly（已在 Fixture 中完成）──
         self._notify("on_stage_start", 1, "context_assembly")
-        print("[Stage 1/5] 上下文组装...")
+        logger.info("[Stage 1/5] 上下文组装...")
 
         # ── 3. 重试循环: Stage 2-5 ──
         max_retries = (
@@ -152,11 +229,11 @@ class Harness:
         for attempt in range(max_retries + 1):
             if attempt > 0:
                 self._notify("on_retry", attempt)
-                print(f"  [RETRY] 重试第 {attempt} 次...")
+                logger.info("  [RETRY] 重试第 %d 次...", attempt)
 
             # ── Stage 2: Narrative Anchoring ──
             self._notify("on_stage_start", 2, "narrative_anchoring")
-            print(f"[Stage 2/5] 叙事锚定 (attempt {attempt + 1})...")
+            logger.info("[Stage 2/5] 叙事锚定 (attempt %d)...", attempt + 1)
             narration = narrative_stage.execute(ctx, self.sut, harness_input, extra)
             narration = NarrativeStage.truncate(narration, 250)
             self._notify("on_narration_complete", narration)
@@ -164,7 +241,7 @@ class Harness:
 
             # ── Stage 3: Dialogue Generation ──
             self._notify("on_stage_start", 3, "dialogue_generation")
-            print(f"[Stage 3/5] 对话生成 (attempt {attempt + 1})...")
+            logger.info("[Stage 3/5] 对话生成 (attempt %d)...", attempt + 1)
             dialogues = dialogue_stage.execute(ctx, self.sut, harness_input, extra, narration=narration)
             dialogues = dialogues[:15]  # 硬上限15轮
             self._notify("on_stage_complete", 3, dialogues)
@@ -177,7 +254,7 @@ class Harness:
 
             # ── Stage 5: Validation Gate ──
             self._notify("on_stage_start", 5, "validation_gate")
-            print(f"[Stage 5/5] 验证门控 (attempt {attempt + 1})...")
+            logger.info("[Stage 5/5] 验证门控 (attempt %d)...", attempt + 1)
             validator = NarrativeValidator(
                 ctx.assembled,
                 min_dialogues=harness_input.options.dialogue_count_min,
@@ -188,75 +265,23 @@ class Harness:
             self._notify("on_stage_complete", 5, validation)
 
             if validation.passed:
-                print("  [OK] 验证通过")
+                logger.info("  [OK] 验证通过")
                 break
             else:
                 failed = [c.name for c in validation.checks if not c.passed]
-                print(f"  [FAIL] 验证未通过: {failed}")
+                logger.info("  [FAIL] 验证未通过: %s", failed)
 
         # ── 4. Fallback 检查 ──
-        min_req = harness_input.options.dialogue_count_min
-        if len(dialogues) < min_req:
-            print(f"  [FALLBACK] 对话不足 ({len(dialogues)}/{min_req})，启用保底生成...")
-            self._notify("on_fallback", {"reason": "dialogue_insufficient", "count": len(dialogues), "min": min_req})
-
-            state = HarnessState(
-                narration=narration,
-                dialogues=dialogues,
-                choices=choices,
-                validation=validation,
-            )
-            # 设置 min_count：将 dialogues 列表长度设为 min_req，以便 Fallback 读取
-            # 这里通过 narration + ctx 生成保底对话
-            fallback_dialogues = self.fallback.execute(ctx.assembled, self.sut, state)
-
-            # 注意：fallback.execute 内部使用 min_count = len(state.dialogues)
-            # 但我们需要 min_req，所以要修正
-            # 实际上 fallback._hardcode_fallback 接受 min_count，我们直接传入 min_req
-            # 让我们直接调用 fallback 的方法
-            if len(fallback_dialogues) < min_req:
-                # 使用硬编码保底
-                fallback_dialogues = self.fallback._hardcode_fallback(ctx.assembled, min_req)
-
-            if fallback_dialogues:
-                dialogues = fallback_dialogues
-                print(f"  [FALLBACK] 保底生成 {len(fallback_dialogues)} 轮对话")
-
-            # 重新验证
-            validator = NarrativeValidator(
-                ctx.assembled,
-                min_dialogues=min_req,
-                max_dialogues=harness_input.options.dialogue_count_max,
-            )
-            validation = validator.validate_all(narration, dialogues, choices, retry_count=max_retries + 1)
-
-        # ── 5. 构建 HarnessOutput ──
-        elapsed = int((time.time() - start_time) * 1000)
-        worldline_state = {
-            "currentNode": ctx.assembled.current_node,
-            "nodeIndex": ctx.assembled.node_index,
-            "totalNodes": ctx.assembled.total_nodes,
-            "progress": round(ctx.assembled.worldline_progress, 2),
-        }
-
-        output = HarnessOutput(
-            success=validation.passed if validation else False,
-            narration=narration,
-            dialogues=dialogues,
-            next_choices=choices,
-            worldline_state=worldline_state,
-            validation=validation or ValidationResult(passed=False, checks=[]),
-            metadata={
-                "generationTime": elapsed,
-                "model": self.sut.llm.model,
-            },
+        dialogues, validation = self._apply_fallback(
+            ctx, harness_input, narration, dialogues, choices, validation, max_retries
         )
 
+        # ── 5. 构建 HarnessOutput ──
+        output = self._build_output(ctx, narration, dialogues, choices, validation, start_time)
         result = output.to_dict()
         self._notify("on_run_complete", result)
-        print(f"\n{'=' * 50}")
-        print(f"Pipeline 完成 | 耗时: {elapsed}ms | 验证: {'通过' if output.success else '未通过'}")
-        print(f"{'=' * 50}")
+        elapsed = output.metadata["generationTime"]
+        logger.info("Pipeline 完成 | 耗时: %dms | 验证: %s", elapsed, '通过' if output.success else '未通过')
         return result
 
     def run_stream(self, input_data: dict | HarnessInput) -> Generator[dict, None, None]:
@@ -279,7 +304,7 @@ class Harness:
 
             # ── 2. Stage 1: Context Assembly ──
             yield {"event": "stage", "stage": 1, "message": "正在组装上下文..."}
-            print("[Stream Stage 1/5] 上下文组装...")
+            logger.info("[Stream Stage 1/5] 上下文组装...")
 
             # ── 3. 重试循环: Stage 2-5 ──
             max_retries = (
@@ -301,30 +326,29 @@ class Harness:
             for attempt in range(max_retries + 1):
                 if attempt > 0:
                     yield {"event": "retry", "attempt": attempt}
-                    print(f"  [Stream RETRY] 重试第 {attempt} 次...")
+                    logger.info("  [Stream RETRY] 重试第 %d 次...", attempt)
 
                 # ── Stage 2: Narrative Anchoring（逐字流式推送，硬截断≤250字）──
                 yield {"event": "stage", "stage": 2, "message": "正在生成旁白..."}
-                print(f"[Stream Stage 2/5] 叙事锚定 (attempt {attempt + 1})...")
+                logger.info("[Stream Stage 2/5] 叙事锚定 (attempt %d)...", attempt + 1)
                 yield {"event": "narration_start"}
                 narration = ""
-                _narr_cutoff = False
-                for evt in narrative_stage.execute_stream(ctx, self.sut, harness_input, extra):
+                _narr_stream = narrative_stage.execute_stream(ctx, self.sut, harness_input, extra)
+                for evt in _narr_stream:
                     if evt.get("event") == "narration_delta":
                         narration += evt["delta"]
                         if len(narration) <= 250:
                             yield evt
-                        elif not _narr_cutoff:
-                            _narr_cutoff = True
-                    elif evt.get("event") == "narration":
-                        # 最终完整旁白
-                        pass
+                        else:
+                            # 已达上限，立即终止 LLM 流，节省 tokens 和时间
+                            _narr_stream.close()
+                            break
                 narration = NarrativeStage.truncate(narration, 250)
                 yield {"event": "narration", "text": narration}
 
                 # ── Stage 3: Dialogue Generation（流式：逐条推送）──
                 yield {"event": "stage", "stage": 3, "message": "正在生成对话..."}
-                print(f"[Stream Stage 3/5] 对话生成 (attempt {attempt + 1})...")
+                logger.info("[Stream Stage 3/5] 对话生成 (attempt %d)...", attempt + 1)
                 dialogues = []
                 _action_count = 0
                 _dlg_since_last_action = 0
@@ -349,7 +373,7 @@ class Harness:
 
                 # ── Stage 5: Validation Gate ──
                 yield {"event": "stage", "stage": 5, "message": "正在验证..."}
-                print(f"[Stream Stage 5/5] 验证门控 (attempt {attempt + 1})...")
+                logger.info("[Stream Stage 5/5] 验证门控 (attempt %d)...", attempt + 1)
                 validator = NarrativeValidator(
                     ctx.assembled,
                     min_dialogues=harness_input.options.dialogue_count_min,
@@ -358,60 +382,32 @@ class Harness:
                 validation = validator.validate_all(narration, dialogues, choices, retry_count=attempt)
 
                 if validation.passed:
-                    print("  [OK] 验证通过")
+                    logger.info("  [OK] 验证通过")
                     break
                 else:
                     failed = [c.name for c in validation.checks if not c.passed]
-                    print(f"  [FAIL] 验证未通过: {failed}")
+                    logger.info("  [FAIL] 验证未通过: %s", failed)
 
             # ── 4. Fallback 检查 ──
             min_req = harness_input.options.dialogue_count_min
             if len(dialogues) < min_req:
-                print(f"  [Stream FALLBACK] 对话不足 ({len(dialogues)}/{min_req})，启用保底生成...")
-                state = HarnessState(
-                    narration=narration,
-                    dialogues=dialogues,
-                    choices=choices,
-                    validation=validation,
+                old_dialogues = dialogues
+                dialogues, validation = self._apply_fallback(
+                    ctx, harness_input, narration, dialogues, choices, validation, max_retries
                 )
-                fallback_dialogues = self.fallback.execute(ctx.assembled, self.sut, state)
-                if len(fallback_dialogues) < min_req:
-                    fallback_dialogues = self.fallback._hardcode_fallback(ctx.assembled, min_req)
-                if fallback_dialogues:
-                    dialogues = fallback_dialogues
+                # 流式下保底触发时重新推送全部内容
+                if dialogues is not old_dialogues:
                     yield {"event": "retry", "attempt": max_retries + 1}
                     yield {"event": "narration", "text": narration}
                     for d in dialogues:
                         yield {"event": "dialogue", "speaker": d.speaker, "text": d.text, "emotion": d.emotion}
                     yield {"event": "choices", "choices": [c.to_dict() for c in choices]}
-                validator = NarrativeValidator(
-                    ctx.assembled,
-                    min_dialogues=min_req,
-                    max_dialogues=harness_input.options.dialogue_count_max,
-                )
-                validation = validator.validate_all(narration, dialogues, choices, retry_count=max_retries + 1)
 
             # ── 5. 构建 HarnessOutput ──
-            elapsed = int((time.time() - start_time) * 1000)
-            worldline_state = {
-                "currentNode": ctx.assembled.current_node,
-                "nodeIndex": ctx.assembled.node_index,
-                "totalNodes": ctx.assembled.total_nodes,
-                "progress": round(ctx.assembled.worldline_progress, 2),
-            }
-            output = HarnessOutput(
-                success=validation.passed if validation else False,
-                narration=narration,
-                dialogues=dialogues,
-                next_choices=choices,
-                worldline_state=worldline_state,
-                validation=validation or ValidationResult(passed=False, checks=[]),
-                metadata={"generationTime": elapsed, "model": self.sut.llm.model},
-            )
+            output = self._build_output(ctx, narration, dialogues, choices, validation, start_time)
             result = output.to_dict()
-            print(f"\n{'=' * 50}")
-            print(f"Stream Pipeline 完成 | 耗时: {elapsed}ms | 验证: {'通过' if output.success else '未通过'}")
-            print(f"{'=' * 50}")
+            elapsed = output.metadata["generationTime"]
+            logger.info("Stream Pipeline 完成 | 耗时: %dms | 验证: %s", elapsed, '通过' if output.success else '未通过')
 
             yield {
                 "event": "done",

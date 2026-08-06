@@ -1,8 +1,8 @@
 # QuillForge
 
-基于 **Harness 架构**的 AI 互动叙事生成引擎，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。支持**选择驱动叙事**：玩家选择影响后续剧情走向、解锁隐藏选项、触发不同结局。
+基于 **Harness 架构**的 AI 互动叙事生成引擎，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。支持**选择驱动叙事**：玩家选择影响后续剧情走向、解锁隐藏选项、触发不同结局。同时支持 **AI 实时生成模式**（一句话描述 → 实时生成可玩故事）、**AI 剧本生成**（一句话 → 完整剧本包）、**立绘/背景生图**与 **TTS 语音合成**。
 
-> **版本**: 5.0.0 | **最后更新**: 2026-07-24 | **对话轮数**: 3-15 | **API 端点**: 22 个
+> **版本**: 6.0.0 | **最后更新**: 2026-08-06 | **对话轮数**: 3-15 | **API 端点**: 26 个
 
 ## 快速开始
 
@@ -10,22 +10,28 @@
 # 安装依赖
 pip install -r requirements.txt
 
-# 启动服务器（端口 8766）
-python server_start.py
+# 配置环境变量（复制 .env.example 为 .env 并填入 API Key）
+Copy-Item .env.example .env
+
+# 启动服务器（默认端口 8050，自动打开浏览器）
+python quillforge/server_start.py
 
 # 或直接启动（跳过浏览器自动打开）
-python src/server.py --host 127.0.0.1 --port 8766
+python quillforge/src/server.py --host 127.0.0.1 --port 8050
 
 # API 文档
-# Swagger UI: http://127.0.0.1:8766/docs
-# ReDoc:      http://127.0.0.1:8766/redoc
+# Swagger UI: http://127.0.0.1:8050/docs
+# ReDoc:      http://127.0.0.1:8050/redoc
+
+# 运行全量测试
+pytest
 ```
 
 ### 一键运行剧本
 
 ```powershell
 # 上传剧本文件夹并自动生成全部场景
-curl -X POST http://127.0.0.1:8766/api/load-folder \
+curl -X POST http://127.0.0.1:8050/api/load-folder \
   -H "Content-Type: application/json" \
   -d '{"path": "C:/path/to/剧本目录"}'
 ```
@@ -35,53 +41,69 @@ curl -X POST http://127.0.0.1:8766/api/load-folder \
 ```
 quillforge/
 ├── quillforge.md                   # 完整技术规格文档
-├── README.md                         # 本文件
-├── requirements.txt                  # Python 依赖
-├── server_start.py                   # 服务器启动器（含 API Key 输入）
-├── run.py                            # 回响-DEMO 快速测试启动器
-├── prompts/                          # Prompt 模板（v2）
-│   ├── system_prompt_v2.md           # 系统提示词（剧本对齐 + 角色一致性）
-│   ├── system_prompt_dynamic.md      # 动态系统提示词（叙事风格/世界书/概要等）
-│   ├── narration_v2.md               # Stage 2: 旁白生成模板
-│   ├── dialogue_v2.md                # Stage 3: 对话生成模板
-│   └── choices_v2.md                 # Stage 4: 选择分支模板
-├── config/                           # 配置文件
-│   ├── quillforge_config.yaml         # Harness 运行参数
-│   ├── character_card_template.yaml  # 角色卡模板（10 字段）
-│   ├── worldline_template.yaml       # 世界线模板
-│   └── example_scene.yaml            # 示例场景（含预期输出）
-├── src/                              # 源代码
-│   ├── server.py                     # FastAPI 后端（22 个 API 端点）
-│   ├── quillforge/                   # Harness 架构核心包
-│   │   ├── __init__.py
-│   │   ├── core.py                   # 薄编排器（组件组装 + 流程驱动 + 重试循环）
-│   │   ├── sut.py                    # SUT：LLM 客户端 + Prompt 模板加载/渲染
-│   │   ├── observer.py               # Observer 模式（Logging/SSE/Metrics）
-│   │   ├── fallback.py               # 三层保底策略
-│   │   ├── fixtures.py               # Fixture 系统（PreparedContext）
-│   │   └── stages/                   # 5 个可插拔 Stage
-│   │       ├── base.py               # StageBase 接口
-│   │       ├── context_assembly.py   # Stage 1: 上下文组装
-│   │       ├── narrative.py          # Stage 2: 叙事锚定（旁白流式生成）
-│   │       ├── dialogue.py           # Stage 3: 对话生成（流式 JSON 解析）
-│   │       ├── choices.py            # Stage 4: 选择分支（剧本选项优先）
-│   │       └── validation.py         # Stage 5: 验证门控
-│   ├── schemas.py                    # 数据模型（Character 10 字段 / HarnessInput / Output）
-│   ├── validator.py                  # 验证器（8 项检查）
-│   ├── image_gen.py                  # 生图模块（OpenAI 兼容协议 + 磁盘缓存 + 按需生图）
-│   ├── script_generator.py           # AI 剧本生成器（一句话 → 完整剧本包）
-│   ├── generic_adapter.py            # 通用剧本适配器（模糊匹配 + 多格式 + unlock_conditions 过滤）
-│   ├── realtime_engine.py           # AI 实时生成管线
-│   ├── tts_gen.py                    # TTS 语音合成
-│   └── static/                       # 前端页面
-│       ├── index.html                # Galgame VN 主界面
-│       └── game.html                 # 互动剧场页面
-├── test_samples.py                   # 内置剧本一致性测试
-└── tests/                            # 测试套件
-    ├── test_acceptance.py            # 验收测试
-    ├── test_echo_e2e.py              # 回响-DEMO 专项测试
-    └── test_e2e_full.py              # 全链路三层验证
+├── server_start.py                 # 服务器启动器（含 API Key 输入，端口 8050）
+├── start_server.bat                # Windows 一键启动脚本
+├── prompts/                        # Prompt 模板（Mustache 风格 v2）
+│   ├── system_prompt_v2.md         # 系统提示词（剧本对齐 + 角色一致性）
+│   ├── system_prompt_dynamic.md    # 动态系统提示词（叙事风格/世界书/概要等）
+│   ├── narration_v2.md             # Stage 2: 旁白生成模板
+│   ├── dialogue_v2.md              # Stage 3: 对话生成模板
+│   └── choices_v2.md               # Stage 4: 选择分支模板
+├── config/                         # 配置文件
+│   ├── quillforge_config.yaml      # Harness 运行参数（LLM/阶段/验证阈值）
+│   ├── character_card_template.yaml
+│   ├── worldline_template.yaml
+│   └── example_scene.yaml
+├── samples/                        # 内置示例剧本（回响-DEMO、索尔维0801）
+├── src/
+│   ├── server.py                   # FastAPI 应用入口（中间件、路由注册）
+│   ├── routes/                     # API 层（按功能域拆分，26 个端点）
+│   │   ├── pages.py                # 前端页面（/ 与 /game）
+│   │   ├── story.py                # 剧本交互（/api/story、/api/scene、/play）
+│   │   ├── upload.py               # 剧本上传与加载
+│   │   ├── auto_run.py             # 一键运行（同步 + SSE）
+│   │   ├── session.py              # 会话管理（生成/选择/状态/历史/素材）
+│   │   ├── realtime.py             # AI 实时生成模式
+│   │   ├── script_gen.py           # AI 剧本生成
+│   │   └── assets.py               # 静态资源（生成图片/音频服务）
+│   ├── quillforge/                 # Harness 架构核心包
+│   │   ├── core.py                 # 薄编排器（组件组装 + 流程驱动 + 重试循环）
+│   │   ├── sut.py                  # SUT：LLM 客户端 + Prompt 模板加载/渲染
+│   │   ├── observer.py             # Observer 模式（Logging/SSE/Metrics）
+│   │   ├── fallback.py             # 三层保底策略
+│   │   ├── fixtures.py             # Fixture 系统（PreparedContext）
+│   │   └── stages/                 # 5 个可插拔 Stage
+│   │       ├── base.py             # StageBase 接口
+│   │       ├── context_assembly.py # Stage 1: 上下文组装
+│   │       ├── narrative.py        # Stage 2: 叙事锚定（旁白流式生成）
+│   │       ├── dialogue.py         # Stage 3: 对话生成（流式 JSON 解析）
+│   │       ├── choices.py          # Stage 4: 选择分支（剧本选项优先）
+│   │       └── validation.py       # Stage 5: 验证门控
+│   ├── adapter/                    # 适配器层（剧本解析与数据归一化，不调用 LLM）
+│   │   ├── parser.py               # GenericScriptAdapter（YAML 剧本解析核心）
+│   │   ├── normalizer.py           # 角色字段归一化（fill_character_gaps）
+│   │   └── loader.py               # 剧本加载（load_story/build_worldline）
+│   ├── schemas.py                  # 数据模型（dataclass 定义所有 I/O 结构）
+│   ├── llm_client.py               # 统一 LLM 客户端（OpenAI 兼容格式）
+│   ├── config_manager.py           # 配置管理（环境变量 + YAML）
+│   ├── validator.py                # 叙事验证器（8 项检查）
+│   ├── extra_context.py            # 额外上下文（ExtraContext 类型安全封装）
+│   ├── image_gen.py                # 生图模块（立绘/背景，磁盘缓存 + 按需生图）
+│   ├── tts_gen.py                  # TTS 语音合成（音色克隆 + 预置音色回退）
+│   ├── realtime_engine.py          # AI 实时生成引擎
+│   ├── script_generator.py         # AI 剧本生成器（一句话 → 完整剧本包）
+│   ├── session_manager.py          # 会话状态管理（TTLCache）
+│   ├── dependencies.py             # FastAPI 依赖注入（单例管理）
+│   ├── generic_adapter.py          # 兼容入口（委托 adapter/parser）
+│   ├── formatters.py               # 输出格式化
+│   ├── logger.py                   # 日志工具
+│   └── static/                     # 前端页面
+│       ├── index.html              # Galgame VN 主界面
+│       └── game.html               # 互动剧场页面
+└── tests/                          # pytest 测试套件（9 个模块）
 ```
+
+仓库根目录还包含 `pyproject.toml`（pytest 配置）、`requirements.txt`、`.env.example`、`scripts/check_architecture.py`（架构约束检查）与 `AGENTS.md`（架构指南）。
 
 # Harness 架构
 
@@ -129,14 +151,23 @@ Pipeline 重试（最多 2 次）→ 简化 prompt 重试 → 硬编码保底（
 | 便捷 | `POST /api/load-folder` | 从本地路径加载剧本 |
 | 便捷 | `POST /api/auto-run` | 一键运行全部场景 |
 | 便捷 | `POST /api/auto-run/stream` | SSE 流式一键运行 |
+| 便捷 | `POST /api/generate-script` | AI 生成剧本（SSE 流式进度） |
 | Session | `POST /api/start` | 创建游戏会话 |
 | Session | `POST /api/session/{id}/generate` | 生成当前场景 |
+| Session | `POST /api/session/{id}/generate-stream` | 流式生成场景（SSE） |
+| Session | `GET /api/session/{id}/assets-stream` | 预生成美术素材（SSE） |
 | Session | `POST /api/session/{id}/choose` | 提交玩家选择 |
+| 实时 | `POST /api/realtime/start` | AI 实时生成（一句话 → 故事，SSE） |
+| 实时 | `POST /api/realtime/{id}/choose` | 实时生成-选择分支（SSE） |
 | 轻量 | `POST /api/story` | 加载剧本数据 |
 | 轻量 | `POST /api/scene` | 生成/续写场景 |
-| 前端 | `GET /play` | 互动剧情 Web 界面 |
+| 前端 | `GET /` | Galgame VN 主界面 |
+| 前端 | `GET /game` | 互动剧场页面 |
+| 前端 | `GET /play` | 轻量互动剧情 Web 界面 |
+| 资源 | `GET /generated_images/{path}` | 读取生成的背景/立绘图片 |
+| 资源 | `GET /generated_audio/{path}` | 读取生成的 TTS 语音音频 |
 
-> 完整 22 个端点详见 [API 接口文档](docs/API接口文档.md)。
+> 完整端点详见 [API 接口文档](docs/API接口文档.md)。
 
 ## 输入/输出示例
 
@@ -254,7 +285,14 @@ result_2 = harness.run({
 | `IMAGE_SIZE_CHAR` | 立绘尺寸（默认 1440x2560） |
 | `IMAGE_CONCURRENCY` | 生图并发数（默认 6，推荐 9） |
 | `IMAGE_BG_PRELOAD_COUNT` | 开局预加载场景数（默认 2） |
+| `TTS_API_KEY` | TTS API Key（不配置则纯文字模式运行） |
+| `TTS_BASE_URL` | TTS API 地址（默认 MiMo 网关） |
+| `TTS_MODEL` | TTS 主模型（默认 mimo-v2.5-tts-voiceclone 音色克隆） |
+| `TTS_FALLBACK_MODEL` | TTS 回退模型（默认 mimo-v2.5-tts 预置音色） |
+| `TTS_VOICE_MAP` | 角色名→音色映射（如 `角色A:冰糖,角色B:voice_b.mp3`） |
+
+完整配置参考 [.env.example](.env.example)。
 
 ## 内置示例剧本
 
-回响-DEMO、守夜人、晚风知我意、暗香浮沉、霍格沃兹的阴影、一条狗的使命、铁衣照雪、除夕的警铃、鎏金囚笼、晚风信箱、狗生重启、蔷薇刺、将军的第二次性命
+回响-DEMO、索尔维0801（`quillforge/samples/` 目录）
