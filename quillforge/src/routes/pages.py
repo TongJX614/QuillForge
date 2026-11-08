@@ -16,7 +16,7 @@ def index():
     html_path = _STATIC_DIR / "index.html"
     if html_path.exists():
         return FileResponse(html_path, headers={"Cache-Control": "no-cache"})
-    return {"message": "QuillForge API v3.0 - Visit /docs"}
+    return {"message": "QuillForge API v6.0 - Visit /docs"}
 
 
 @router.get("/game", summary="游戏页面（VN Galgame 引擎）")

@@ -43,7 +43,7 @@ logger = get_logger("server")
 # FastAPI App
 # ═══════════════════════════════════════════════════════
 
-app = FastAPI(title="QuillForge API", version="3.0.0")
+app = FastAPI(title="QuillForge API", version="6.0.0")
 
 app.add_middleware(
     CORSMiddleware,

@@ -58,10 +58,12 @@ quillforge/
 │   │   ├── script_gen.py    # 剧本生成
 │   │   └── assets.py        # 静态资源（图片/音频）
 │   │
-│   ├── adapter/             # 适配器层（剧本解析与数据归一化）
-│   │   ├── parser.py        # GenericScriptAdapter（YAML 剧本解析核心）
+│   ├── adapter/             # 解析层模块化脚手架（当前为重导出，公共接口与 generic_adapter 一致）
+│   │   ├── parser.py        # 重导出 GenericScriptAdapter
 │   │   ├── normalizer.py    # 角色字段归一化（fill_character_gaps）
 │   │   └── loader.py        # 剧本加载（load_story/build_worldline/build_scene_text）
+│   │
+│   ├── generic_adapter.py   # 剧本解析核心（GenericScriptAdapter，扁平/嵌套结构识别）
 │   │
 │   ├── server.py            # FastAPI 应用入口（中间件、路由注册）
 │   ├── schemas.py           # 数据模型（dataclass 定义所有 I/O 结构）
@@ -200,6 +202,6 @@ Stage 5 (`ValidationStage`) 通过 `NarrativeValidator.validate_all()` 执行 8 
 
 ```
 @maintainer: QuillForge Team
-@last_reviewed: 2026-08-06
-@version: 1.2.0
+@last_reviewed: 2026-11-08
+@version: 1.3.0
 ```

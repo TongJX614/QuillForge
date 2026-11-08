@@ -1,298 +1,313 @@
-# QuillForge
+<p align="center">
+  <img src="docs/banner.jpg" alt="QuillForge — AI 互动叙事生成引擎" width="100%">
+</p>
 
-基于 **Harness 架构**的 AI 互动叙事生成引擎，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。支持**选择驱动叙事**：玩家选择影响后续剧情走向、解锁隐藏选项、触发不同结局。同时支持 **AI 实时生成模式**（一句话描述 → 实时生成可玩故事）、**AI 剧本生成**（一句话 → 完整剧本包）、**立绘/背景生图**与 **TTS 语音合成**。
+<h1 align="center">QuillForge</h1>
 
-> **版本**: 6.0.0 | **最后更新**: 2026-08-06 | **对话轮数**: 3-15 | **API 端点**: 26 个
+<p align="center">
+  <b>把一份剧本，变成一场可以玩的互动叙事。</b>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-6.0.0-c5a265" alt="version">
+  <img src="https://img.shields.io/badge/python-3.9%2B-3776AB" alt="python">
+  <img src="https://img.shields.io/badge/FastAPI-0.136%2B-009688" alt="fastapi">
+  <img src="https://img.shields.io/badge/endpoints-26-c5a265" alt="endpoints">
+</p>
+
+QuillForge 是一个 **AI 驱动的互动叙事生成引擎**。它把「世界线、角色卡、场景、事件、结局」这类结构化剧本拆成可编排的生成阶段，逐场景产出旁白、对话与玩家选项；玩家的每一次选择都会被记录并注入后续生成，最终走向不同结局。
+
+如果你手里已经有一部小说、跑团模组或游戏企划，QuillForge 可以把它变成可交互的视觉小说；如果只有一个念头，实时模式能让你用一句话直接开局。
+
+### 它适合谁
+
+- **叙事创作者**：把设定集变成可试玩的互动剧本
+- **游戏原型团队**：快速验证一段 branching narrative 的手感
+- **AI 应用开发者**：参考一个完整的 LLM 编排工程（SUT 隔离、阶段化 Pipeline、验证门控、SSE 流式、Fallback）
+
+---
+
+## 界面预览
+
+| 创作台 | 互动剧场 |
+|:---:|:---:|
+| ![创作台](docs/screenshot-home.png) | ![互动剧场](docs/screenshot-game.png) |
+| 一句话实时创作，或加载已有剧本 | Galgame 式演出：立绘、旁白、选项、TTS |
+
+---
+
+## 功能特性
+
+| 能力 | 说明 |
+|------|------|
+| 五阶段 Harness | 上下文组装 → 叙事锚定 → 对话生成 → 选择分支 → 验证门控，阶段可插拔 |
+| 选择驱动叙事 | 选择历史注入 Prompt，隐藏选项按条件解锁，结局按选择路径匹配 |
+| 流式生成 | 旁白逐字、对话逐条、动作旁白穿插，SSE 实时推送 |
+| AI 实时生成 | 一句话描述 → 实时分场景生成 → 选项 → 结局，无需预先准备剧本 |
+| AI 剧本生成 | 一句话 → 世界书 / 角色 / 世界线 / 事件 / 结局的完整剧本包 |
+| 美术素材 | 背景与立绘按需生成，线程池并行 + 磁盘缓存，无 Key 时自动降级 |
+| 语音合成 | 音色克隆优先，失败回退预置音色，纯文字模式可运行 |
+| 质量兜底 | 8 项验证检查 + 三层 Fallback，保证对话轮数与角色一致性 |
+| 内置示例 | 回响-DEMO、索尔维0801 两套剧本，开箱即玩 |
+
+---
+
+## 两种使用模式
+
+```mermaid
+flowchart LR
+    subgraph S[剧本模式]
+        A1[上传剧本 YAML] --> A2[解析与归一化] --> A3[五阶段 Pipeline] --> A4[逐场景生成]
+    end
+    subgraph R[实时模式]
+        B1[一句话描述] --> B2[实时引擎] --> B3[即时场景 / 对话 / 选项] --> B4[结局存档]
+    end
+    A4 --> P[Galgame 前端]
+    B4 --> P
+```
+
+| 模式 | 输入 | 适合 |
+|------|------|------|
+| 剧本模式 | 结构化剧本目录（4 或 11 个文件） | 已有完整设定的长篇叙事、系列作品 |
+| 实时模式 | 一句话描述（≤ 150 字） | 快速试玩、灵感验证、现场演示 |
+| 剧本生成 | 一句话描述 | 产出一份可继续编辑的完整剧本包 |
+
+---
+
+## 技术栈
+
+| 层 | 选型 |
+|----|------|
+| Web | FastAPI + uvicorn + slowapi |
+| 模型 | openai SDK（兼容 DeepSeek / OpenAI / Azure / Ollama / vLLM / Moonshot） |
+| 数据 | dataclasses + Pydantic + PyYAML |
+| 前端 | 原生 HTML / CSS / JS + SSE 流式渲染 |
+| 图像 | Pillow + rembg 抠图 + OpenAI Images 兼容接口 |
+| 语音 | TTS 音色克隆接口，失败回退预置音色 |
+| 测试 | pytest + 自研架构约束检查 |
+
+---
 
 ## 快速开始
 
-```powershell
-# 安装依赖
+```bash
+# 1. 安装依赖
 pip install -r requirements.txt
 
-# 配置环境变量（复制 .env.example 为 .env 并填入 API Key）
-Copy-Item .env.example .env
+# 2. 准备环境变量
+cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
+# 编辑 .env，至少填入 DEEPSEEK_API_KEY（或 OPENAI_API_KEY）
 
-# 启动服务器（默认端口 8050，自动打开浏览器）
+# 3. 启动（默认端口 8050，自动打开浏览器）
 python quillforge/server_start.py
 
-# 或直接启动（跳过浏览器自动打开）
+# 或直接启动
 python quillforge/src/server.py --host 127.0.0.1 --port 8050
-
-# API 文档
-# Swagger UI: http://127.0.0.1:8050/docs
-# ReDoc:      http://127.0.0.1:8050/redoc
-
-# 运行全量测试
-pytest
 ```
+
+启动后：
+
+- 主界面：<http://127.0.0.1:8050/>
+- 互动剧场：<http://127.0.0.1:8050/game>
+- Swagger：<http://127.0.0.1:8050/docs>
+- ReDoc：<http://127.0.0.1:8050/redoc>
 
 ### 一键运行剧本
 
-```powershell
-# 上传剧本文件夹并自动生成全部场景
+```bash
 curl -X POST http://127.0.0.1:8050/api/load-folder \
   -H "Content-Type: application/json" \
-  -d '{"path": "C:/path/to/剧本目录"}'
+  -d '{"path": "/path/to/剧本目录"}'
 ```
 
-## 项目结构
+### 运行测试
 
-```
-quillforge/
-├── quillforge.md                   # 完整技术规格文档
-├── server_start.py                 # 服务器启动器（含 API Key 输入，端口 8050）
-├── start_server.bat                # Windows 一键启动脚本
-├── prompts/                        # Prompt 模板（Mustache 风格 v2）
-│   ├── system_prompt_v2.md         # 系统提示词（剧本对齐 + 角色一致性）
-│   ├── system_prompt_dynamic.md    # 动态系统提示词（叙事风格/世界书/概要等）
-│   ├── narration_v2.md             # Stage 2: 旁白生成模板
-│   ├── dialogue_v2.md              # Stage 3: 对话生成模板
-│   └── choices_v2.md               # Stage 4: 选择分支模板
-├── config/                         # 配置文件
-│   ├── quillforge_config.yaml      # Harness 运行参数（LLM/阶段/验证阈值）
-│   ├── character_card_template.yaml
-│   ├── worldline_template.yaml
-│   └── example_scene.yaml
-├── samples/                        # 内置示例剧本（回响-DEMO、索尔维0801）
-├── src/
-│   ├── server.py                   # FastAPI 应用入口（中间件、路由注册）
-│   ├── routes/                     # API 层（按功能域拆分，26 个端点）
-│   │   ├── pages.py                # 前端页面（/ 与 /game）
-│   │   ├── story.py                # 剧本交互（/api/story、/api/scene、/play）
-│   │   ├── upload.py               # 剧本上传与加载
-│   │   ├── auto_run.py             # 一键运行（同步 + SSE）
-│   │   ├── session.py              # 会话管理（生成/选择/状态/历史/素材）
-│   │   ├── realtime.py             # AI 实时生成模式
-│   │   ├── script_gen.py           # AI 剧本生成
-│   │   └── assets.py               # 静态资源（生成图片/音频服务）
-│   ├── quillforge/                 # Harness 架构核心包
-│   │   ├── core.py                 # 薄编排器（组件组装 + 流程驱动 + 重试循环）
-│   │   ├── sut.py                  # SUT：LLM 客户端 + Prompt 模板加载/渲染
-│   │   ├── observer.py             # Observer 模式（Logging/SSE/Metrics）
-│   │   ├── fallback.py             # 三层保底策略
-│   │   ├── fixtures.py             # Fixture 系统（PreparedContext）
-│   │   └── stages/                 # 5 个可插拔 Stage
-│   │       ├── base.py             # StageBase 接口
-│   │       ├── context_assembly.py # Stage 1: 上下文组装
-│   │       ├── narrative.py        # Stage 2: 叙事锚定（旁白流式生成）
-│   │       ├── dialogue.py         # Stage 3: 对话生成（流式 JSON 解析）
-│   │       ├── choices.py          # Stage 4: 选择分支（剧本选项优先）
-│   │       └── validation.py       # Stage 5: 验证门控
-│   ├── adapter/                    # 适配器层（剧本解析与数据归一化，不调用 LLM）
-│   │   ├── parser.py               # GenericScriptAdapter（YAML 剧本解析核心）
-│   │   ├── normalizer.py           # 角色字段归一化（fill_character_gaps）
-│   │   └── loader.py               # 剧本加载（load_story/build_worldline）
-│   ├── schemas.py                  # 数据模型（dataclass 定义所有 I/O 结构）
-│   ├── llm_client.py               # 统一 LLM 客户端（OpenAI 兼容格式）
-│   ├── config_manager.py           # 配置管理（环境变量 + YAML）
-│   ├── validator.py                # 叙事验证器（8 项检查）
-│   ├── extra_context.py            # 额外上下文（ExtraContext 类型安全封装）
-│   ├── image_gen.py                # 生图模块（立绘/背景，磁盘缓存 + 按需生图）
-│   ├── tts_gen.py                  # TTS 语音合成（音色克隆 + 预置音色回退）
-│   ├── realtime_engine.py          # AI 实时生成引擎
-│   ├── script_generator.py         # AI 剧本生成器（一句话 → 完整剧本包）
-│   ├── session_manager.py          # 会话状态管理（TTLCache）
-│   ├── dependencies.py             # FastAPI 依赖注入（单例管理）
-│   ├── generic_adapter.py          # 兼容入口（委托 adapter/parser）
-│   ├── formatters.py               # 输出格式化
-│   ├── logger.py                   # 日志工具
-│   └── static/                     # 前端页面
-│       ├── index.html              # Galgame VN 主界面
-│       └── game.html               # 互动剧场页面
-└── tests/                          # pytest 测试套件（9 个模块）
+```bash
+pip install pytest
+pytest
+
+# 架构约束检查
+python scripts/check_architecture.py
 ```
 
-仓库根目录还包含 `pyproject.toml`（pytest 配置）、`requirements.txt`、`.env.example`、`scripts/check_architecture.py`（架构约束检查）与 `AGENTS.md`（架构指南）。
-
-# Harness 架构
-
-QuillForge 采用真正的 Harness 架构，核心特征：
-
-| 特征 | 说明 |
-|------|------|
-| **SUT 隔离** | LLM 客户端 + Prompt 渲染封装为 `NarrativeSUT`，可整体替换 |
-| **可插拔 Stage** | 5 个阶段实现 `StageBase` 接口，可替换、重排、新增 |
-| **Observer 模式** | 事件发射与执行逻辑解耦，支持 Logging/SSE/Metrics 观察者 |
-| **Fixture 系统** | `PreparedContext` 管理前置准备与后置清理 |
-| **Fallback 策略** | 三层保底抽象为 `DialogueFallback` 策略，可替换 |
-| **薄编排器** | `Harness` 核心仅负责组装 + 驱动 + 重试 + 通知，不含业务逻辑 |
-
-### 5 阶段流水线
-
-```
-Fixture → [Stage 1: 上下文组装] → [Stage 2: 叙事锚定] → [Stage 3: 对话生成]
-        → [Stage 4: 选择分支] → [Stage 5: 验证门控] → Fixture teardown
-                                      ↑                    │
-                                      └── 验证失败重试 ────┘
-```
-
-**三层保底机制**（确保对话 ≥ 3 轮）：
-
-```
-Pipeline 重试（最多 2 次）→ 简化 prompt 重试 → 硬编码保底（不依赖 LLM）
-```
-
-### 选择驱动叙事机制
-
-玩家选择通过以下机制影响后续剧情发展：
-
-| 机制 | 说明 |
-|------|------|
-| **完整选择历史注入** | 玩家在每个场景的选择文本 + 后果（consequences）通过 `{{choiceHistory}}` 注入到旁白和对话的 prompt 中，LLM 据此体现选择路径的累积影响 |
-| **选项 ID 保存** | `choose()` 保存 `option_id` 到历史记录，用于 `unlock_conditions` 精确匹配 |
-| **unlock_conditions 过滤** | 隐藏选项仅在满足前置条件时展示（如"在 scene_01 选择 investigate 且在 scene_02 选择 continue"才解锁 hidden 选项） |
-| **结局匹配** | 最终结局根据完整选择历史通过关键词同义词匹配 |
-
-## API 端点总览
-
-| 类型 | 端点 | 用途 |
-|------|------|------|
-| 便捷 | `POST /api/load-folder` | 从本地路径加载剧本 |
-| 便捷 | `POST /api/auto-run` | 一键运行全部场景 |
-| 便捷 | `POST /api/auto-run/stream` | SSE 流式一键运行 |
-| 便捷 | `POST /api/generate-script` | AI 生成剧本（SSE 流式进度） |
-| Session | `POST /api/start` | 创建游戏会话 |
-| Session | `POST /api/session/{id}/generate` | 生成当前场景 |
-| Session | `POST /api/session/{id}/generate-stream` | 流式生成场景（SSE） |
-| Session | `GET /api/session/{id}/assets-stream` | 预生成美术素材（SSE） |
-| Session | `POST /api/session/{id}/choose` | 提交玩家选择 |
-| 实时 | `POST /api/realtime/start` | AI 实时生成（一句话 → 故事，SSE） |
-| 实时 | `POST /api/realtime/{id}/choose` | 实时生成-选择分支（SSE） |
-| 轻量 | `POST /api/story` | 加载剧本数据 |
-| 轻量 | `POST /api/scene` | 生成/续写场景 |
-| 前端 | `GET /` | Galgame VN 主界面 |
-| 前端 | `GET /game` | 互动剧场页面 |
-| 前端 | `GET /play` | 轻量互动剧情 Web 界面 |
-| 资源 | `GET /generated_images/{path}` | 读取生成的背景/立绘图片 |
-| 资源 | `GET /generated_audio/{path}` | 读取生成的 TTS 语音音频 |
-
-> 完整端点详见 [API 接口文档](docs/API接口文档.md)。
-
-## 输入/输出示例
-
-**输入：**
-```json
-{
-  "currentScene": "太空旅行中，飞船遭遇陨石流",
-  "characters": [
-    {
-      "name": "林晗", "role": "物理学家",
-      "personality": "冷静理性，喜欢用数据和概率分析问题",
-      "speakingStyle": "学术腔，句式精准",
-      "background": "天体物理学博士，飞船首席科学家",
-      "motivation": "保护船员安全抵达目的地",
-      "secrets": "知道飞船燃料不足但未告知其他人",
-      "relationships": "与赵远山有深厚的工作信任",
-      "appearance": "瘦高，戴眼镜，常穿实验服",
-      "arc": "从纯粹理性到学会信任直觉"
-    },
-    {
-      "name": "赵远山", "role": "指挥官",
-      "personality": "果断务实，行动优先"
-    }
-  ],
-  "worldline": "出发 → 旅行 → 危机 → 到达",
-  "playerChoice": "选择左转躲避"
-}
-```
-
-**输出：**
-```json
-{
-  "success": true,
-  "data": {
-    "narration": "陨石流在雷达上密密麻麻，像一场无声的暴雨……",
-    "dialogues": [
-      { "speaker": "赵远山", "text": "左转！现在！", "emotion": "急切" },
-      { "speaker": "林晗", "text": "左转的话我们会偏离航线至少 3 天。", "emotion": "分析" },
-      { "speaker": "赵远山", "text": "先活下来再算账。", "emotion": "果断" },
-      { "speaker": "林晗", "text": "……偏转角度 37 度，推进器全开。我已经算好了。", "emotion": "沉着" }
-    ],
-    "nextChoices": [
-      { "text": "执行左转", "effect": "安全但延误", "worldlineImpact": "stay_current" },
-      { "text": "正面穿越", "effect": "高风险高回报", "worldlineImpact": "advance_risky" }
-    ],
-    "worldlineState": { "currentNode": "危机", "nodeIndex": 2, "totalNodes": 4, "progress": 0.67 }
-  },
-  "validation": { "passed": true, "checks": [...], "retryCount": 0 }
-}
-```
-
-## Character 角色卡（10 字段）
-
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `name` | 是 | 角色姓名 |
-| `role` | 是 | 身份/职业 |
-| `personality` | 是 | 性格描述 |
-| `speakingStyle` | 否 | 说话风格 |
-| `background` | 否 | 背景故事 |
-| `motivation` | 否 | 角色动机 |
-| `secrets` | 否 | 角色秘密 |
-| `relationships` | 否 | 角色关系 |
-| `appearance` | 否 | 外貌描述 |
-| `arc` | 否 | 成长弧线 |
-
-> 简单结构剧本（仅含 5 字段）自动降级推断缺失字段。
-
-## 支持的剧本结构
-
-**扁平结构（4 文件）**：元数据 + 主要角色 + 场景清单 + 主线剧情
-
-**嵌套结构（11 文件）**：额外含世界线、事件清单、关键选择、结局系统、角色关系、世界书
-
-## 续写机制
-
-将上一轮输出作为 `previousContext` 传入即可实现连续叙事，同时传入 `choice_history` 以让 LLM 感知完整选择路径：
-
-```python
-from quillforge.core import create_default_harness
-
-harness = create_default_harness()
-
-# 第 1 轮
-result_1 = harness.run({"currentScene": "...", "characters": [...], "worldline": "..."})
-
-# 第 2 轮（玩家选择了选项 A）
-result_2 = harness.run({
-    "currentScene": "新场景描述",
-    "characters": [...],
-    "worldline": "...",
-    "playerChoice": "选项A的描述",
-    "previousContext": result_1["data"],
-    "_choiceHistory": "场景1：选择了「选项A」— 后果：..."
-})
-```
-
-## 支持的 LLM
-
-兼容所有 OpenAI API 格式的服务：OpenAI、Azure OpenAI、Ollama、vLLM、DeepSeek、Moonshot 等。
-在 `config/quillforge_config.yaml` 中配置 `apiBase` 和 `model` 即可。
+---
 
 ## 环境变量
 
 | 变量 | 说明 |
 |------|------|
-| `DEEPSEEK_API_KEY` | DeepSeek API Key |
-| `DEEPSEEK_MODEL` | 模型名称（默认 deepseek-chat） |
-| `DEEPSEEK_BASE_URL` | API 地址（默认 https://api.deepseek.com） |
-| `OPENAI_API_KEY` | 通用 OpenAI 兼容 API Key（优先级高于 DEEPSEEK） |
-| `IMAGE_API_KEY` | 生图 API Key（不配置则禁用生图，走纯缓存/占位模式） |
-| `IMAGE_BASE_URL` | 生图 API 地址 |
-| `IMAGE_MODEL` | 生图模型（默认 seedream-5.0-lite） |
-| `IMAGE_SIZE_BG` | 背景尺寸（默认 2560x1440） |
-| `IMAGE_SIZE_CHAR` | 立绘尺寸（默认 1440x2560） |
-| `IMAGE_CONCURRENCY` | 生图并发数（默认 6，推荐 9） |
-| `IMAGE_BG_PRELOAD_COUNT` | 开局预加载场景数（默认 2） |
-| `TTS_API_KEY` | TTS API Key（不配置则纯文字模式运行） |
-| `TTS_BASE_URL` | TTS API 地址（默认 MiMo 网关） |
-| `TTS_MODEL` | TTS 主模型（默认 mimo-v2.5-tts-voiceclone 音色克隆） |
-| `TTS_FALLBACK_MODEL` | TTS 回退模型（默认 mimo-v2.5-tts 预置音色） |
-| `TTS_VOICE_MAP` | 角色名→音色映射（如 `角色A:冰糖,角色B:voice_b.mp3`） |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key（或使用 `OPENAI_API_KEY`） |
+| `DEEPSEEK_MODEL` | 模型名称，默认 `deepseek-chat` |
+| `DEEPSEEK_BASE_URL` | API 地址，默认 `https://api.deepseek.com` |
+| `OPENAI_API_KEY` | 通用 OpenAI 兼容 Key，优先级高于 `DEEPSEEK_API_KEY` |
+| `QUILLFORGE_API_KEY` | 可选：启用后所有 `/api/*` 请求需携带 `X-API-Key` |
+| `IMAGE_API_KEY` / `IMAGE_BASE_URL` / `IMAGE_MODEL` | 生图服务；三者缺失时禁用生图 |
+| `IMAGE_SIZE_BG` / `IMAGE_SIZE_CHAR` | 背景 / 立绘尺寸 |
+| `IMAGE_CONCURRENCY` | 生图并发数 |
+| `TTS_API_KEY` / `TTS_BASE_URL` / `TTS_MODEL` | TTS 服务；缺失时退化为纯文字模式 |
+| `TTS_FALLBACK_MODEL` | 音色回退模型（预置音色） |
+| `TTS_VOICE_MAP` | 角色名到音色的映射，如 `角色A:冰糖,角色B:voice_b.mp3` |
 
-完整配置参考 [.env.example](.env.example)。
+完整清单与默认值见 [.env.example](.env.example)。运行时参数（模型、温度、轮数、验证阈值）位于 [quillforge/config/quillforge_config.yaml](quillforge/config/quillforge_config.yaml)。
 
-## 内置示例剧本
+---
 
-回响-DEMO、索尔维0801（`quillforge/samples/` 目录）
+## 项目结构
+
+```text
+QuillForge/
+├── README.md
+├── AGENTS.md                       # AI Agent 架构指南
+├── CHANGELOG.md
+├── requirements.txt
+├── pyproject.toml                  # pytest 配置
+├── .env.example
+├── .pre-commit-config.yaml
+├── docs/
+│   ├── ARCHITECTURE.md             # 架构设计（阶段契约/扩展指南）
+│   └── API接口文档.md               # 全部端点与数据模型
+├── scripts/
+│   └── check_architecture.py       # 架构约束检查
+└── quillforge/
+    ├── server_start.py             # 启动器（交互式输入 Key）
+    ├── start_server.bat            # Windows 一键启动
+    ├── config/                     # 运行配置与角色卡/世界线模板
+    ├── prompts/                    # Prompt 模板（Mustache 风格）
+    ├── samples/                    # 内置示例剧本
+    ├── src/
+    │   ├── server.py               # FastAPI 入口（中间件/限流/路由注册）
+    │   ├── routes/                 # API 层（8 个功能域，26 个端点）
+    │   ├── quillforge/             # Harness 核心包
+    │   │   ├── core.py             # 薄编排器（驱动 + 重试 + 通知）
+    │   │   ├── sut.py              # LLM 与 Prompt 隔离层
+    │   │   ├── observer.py         # 日志 / SSE / 指标观察者
+    │   │   ├── fallback.py         # 三层保底策略
+    │   │   ├── fixtures.py         # PreparedContext
+    │   │   └── stages/             # 五个阶段实现
+    │   ├── adapter/                # 解析层模块化脚手架（兼容重导出）
+    │   ├── generic_adapter.py      # 剧本解析核心（扁平/嵌套结构识别）
+    │   ├── schemas.py              # dataclass 数据模型
+    │   ├── llm_client.py           # OpenAI 兼容客户端
+    │   ├── config_manager.py       # 配置管理
+    │   ├── validator.py            # 8 项叙事检查
+    │   ├── session_manager.py      # 有状态会话
+    │   ├── dependencies.py         # FastAPI 单例与 TTLCache
+    │   ├── realtime_engine.py      # AI 实时生成
+    │   ├── script_generator.py     # AI 剧本生成
+    │   ├── image_gen.py            # 生图
+    │   ├── tts_gen.py              # 语音合成
+    │   └── static/                 # index.html / game.html / web_play.html
+    └── tests/                      # pytest 测试（9 个模块）
+```
+
+---
+
+## 架构概览
+
+```mermaid
+flowchart LR
+    F[Fixture<br/>PreparedContext] --> S1[Stage 1<br/>上下文组装]
+    S1 --> S2[Stage 2<br/>叙事锚定]
+    S2 --> S3[Stage 3<br/>对话生成]
+    S3 --> S4[Stage 4<br/>选择分支]
+    S4 --> S5{Stage 5<br/>验证门控}
+    S5 -- 通过 --> O[输出场景]
+    S5 -- 失败 --> RT{重试未耗尽}
+    RT -- 是 --> S2
+    RT -- 否 --> FB[三层 Fallback] --> O
+```
+
+关键约束：
+
+- **Harness 是薄编排器**：只负责组装、驱动、重试与通知，不写业务逻辑
+- **SUT 隔离**：所有 LLM 调用与 Prompt 渲染经由 `NarrativeSUT`
+- **阶段可插拔**：新增阶段继承 `StageBase` 并实现 `execute()`
+- **解析不调模型**：`generic_adapter.py` 只做解析与归一化
+- **路由不含生成逻辑**：`routes/` 只做请求解析、调用引擎、格式化响应
+
+完整设计见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+---
+
+## 选择驱动叙事
+
+| 机制 | 实现 |
+|------|------|
+| 完整选择历史 | 选择文本与后果经 `{{choiceHistory}}` 注入旁白/对话/选项 Prompt |
+| 选项 ID 持久化 | `choose()` 保存 `option_id`，供 `unlock_conditions` 精确匹配 |
+| 隐藏选项解锁 | 满足前置场景与选项组合后才出现在候选列表 |
+| 结局匹配 | 按完整选择历史与结局条件做关键词匹配 |
+
+---
+
+## API 端点总览
+
+| 类型 | 端点 | 用途 |
+|------|------|------|
+| 页面 | `GET /` · `GET /game` · `GET /play` | 主界面 · 互动剧场 · 轻量网页 |
+| 上传 | `POST /api/upload` · `/api/upload-directory` | 上传单文件 / 文件夹 |
+| 上传 | `POST /api/load-folder` | 从本地路径加载剧本 |
+| 示例 | `GET /api/samples` · `POST /api/upload-sample-path` | 列出 / 加载内置示例 |
+| 便捷 | `POST /api/auto-run` · `/api/auto-run/stream` | 一键运行（同步 / SSE） |
+| 便捷 | `POST /api/generate-script` | AI 生成剧本（SSE） |
+| Session | `POST /api/start` | 创建游戏会话 |
+| Session | `POST /api/session/{id}/generate` · `/generate-stream` | 生成场景（同步 / SSE） |
+| Session | `POST /api/session/{id}/choose` | 提交玩家选择 |
+| Session | `GET /api/session/{id}/state` · `/history` | 查询状态 / 历史 |
+| Session | `GET /api/session/{id}/assets-stream` | 预生成美术素材（SSE） |
+| 实时 | `POST /api/realtime/start` | 一句话实时生成（SSE） |
+| 实时 | `POST /api/realtime/{id}/choose` | 实时模式选择分支（SSE） |
+| 实时 | `GET /api/realtime/{id}/state` · `/assets-stream` | 状态查询 / 素材预生成 |
+| 轻量 | `POST /api/story` · `/api/scene` | 无状态加载与生成 |
+| 资源 | `GET /generated_images/{path}` · `/generated_audio/{path}` | 读取图片 / 音频 |
+
+全部 26 个业务端点的请求体、响应体与 SSE 事件格式见 [API 接口文档](docs/API接口文档.md)。
+
+---
+
+## 剧本格式
+
+**扁平结构（4 文件）**：剧本元数据 + 主要角色 + 场景清单 + 主线剧情
+
+**嵌套结构（11 文件）**：额外包含世界线、事件清单、关键选择、结局系统、角色关系、世界书，解析器按文件名关键词自动识别。
+
+角色卡共 10 个字段，必填 `name` / `role` / `personality`，其余字段缺失时按已有信息自动推断：
+
+`name` · `role` · `personality` · `speakingStyle` · `background` · `motivation` · `secrets` · `relationships` · `appearance` · `arc`
+
+示例剧本见 [quillforge/samples/](quillforge/samples/)。
+
+---
+
+## 内置示例
+
+| 剧本 | 说明 |
+|------|------|
+| 回响-DEMO | 嵌套结构示例，含世界线、事件、关键选择与多结局 |
+| 索尔维0801 | 嵌套结构示例，含完整角色关系与世界书 |
+
+---
+
+## 支持的模型服务
+
+兼容所有 OpenAI API 格式：DeepSeek、OpenAI、Azure OpenAI、Moonshot、Ollama、vLLM 等。修改 `config/quillforge_config.yaml` 中的 `apiBase` 与 `model` 即可切换。
+
+---
+
+## 文档
+
+| 文档 | 内容 |
+|------|------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层架构、阶段契约、Fallback、扩展指南 |
+| [docs/API接口文档.md](docs/API接口文档.md) | 26 个端点、数据模型、SSE 事件、调用流程 |
+| [AGENTS.md](AGENTS.md) | 面向 AI Agent 的架构约束与排障手册 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
+
+---
+
+## 已知限制
+
+- 质量依赖底层模型能力，弱模型可能频繁触发验证重试或兜底
+- 生图与 TTS 需要各自的服务凭据，未配置时自动降级，不影响文字流程
+- 实时模式单次输入上限 150 字，单局场景上限 8 个
+- 会话默认 30 分钟过期，过期后需重新创建
