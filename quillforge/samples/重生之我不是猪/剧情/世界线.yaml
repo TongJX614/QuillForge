@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 程序员朱重生猝死后变成养猪场的猪，他用人类智慧搞'猪圈优化'，结识兽医林晓雯，帮老板黄大壮扭转养猪场命运，却面临被卖去屠宰的终极危机。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 重生之猪圈惊魂
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

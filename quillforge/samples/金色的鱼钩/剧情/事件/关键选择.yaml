@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 鱼汤疑云
+  description: ''
+  options:
+  - id: choice_1
+    text: 悄悄绕到老班长身后，看清他到底在吃什么
+    leads_to_ending: null
+  - id: choice_2
+    text: 先把汤喝完，明天一早偷偷跟老班长去钓鱼
+    leads_to_ending: null
+  - id: choice_3
+    text: 拉着小陈小刘一起，硬把汤分给老班长
+    leads_to_ending: null

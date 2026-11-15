@@ -1,0 +1,19 @@
+scenes:
+- id: scene_01
+  name: 空座上的外套
+  location: 夜7路末班车车厢内
+  time: 深夜23:47
+  atmosphere: 昏黄灯光下的封闭车厢，窗外夜色飞逝，空气里弥漫着不安与压低声音的试探
+  description: 引擎低沉的轰鸣裹着车身驶离火车站，窗外的霓虹被拉成一条条模糊的光带。车厢里只亮着半数顶灯，昏黄的光落在空荡荡的座椅上，显得比平时更冷清。你靠在中门旁的座位上，刚想合眼歇一会儿，邻座那位打瞌睡的老人手里攥着的塑料袋忽然滑落，哗啦一声散在地上。你下意识转头——座位上只剩一件叠得整整齐齐的深灰色外套，老人却不见了。中门紧闭，车速平稳，没有任何停靠的迹象。你盯着那件外套，后背一点点发凉。车厢前部，一个提着菜篮的中年女人猛地站了起来。
+  trigger_conditions:
+    type: game_start
+  characters_present:
+  - char_01
+  - char_02
+  - char_03
+  - char_04
+  interactions: []
+  assets_needed: []
+  branching_point: false
+  critical_choice: ''
+  narrative_notes: 深夜公交车厢内部，昏黄顶灯只亮半数，空荡的深蓝色座椅排列整齐，中门紧闭，车窗外的城市霓虹被拉成模糊光带，地面散落一只塑料袋和几样杂物，过道尽头光线暗淡

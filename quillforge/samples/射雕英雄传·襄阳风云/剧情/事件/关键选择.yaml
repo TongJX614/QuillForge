@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 夜雨孤城
+  description: ''
+  options:
+  - id: choice_1
+    text: 请杨过潜入蒙古大营，探明金轮法王的具体布防
+    leads_to_ending: null
+  - id: choice_2
+    text: 连夜召集守城将领，重新部署城防应对强敌
+    leads_to_ending: null
+  - id: choice_3
+    text: 亲自带一队人马出城夜袭，试探蒙古军虚实
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 聚义厅夜议
+  description: ''
+  options:
+  - id: choice_1
+    text: 让黄蓉说出那个两全的法子
+    leads_to_ending: null
+  - id: choice_2
+    text: 先压下争论，问清杨过究竟为何肯拿命去赌
+    leads_to_ending: null
+  - id: choice_3
+    text: 拍板定案，按杨过说的办，另调精锐暗中接应
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 灯下问心
+  description: ''
+  options:
+  - id: choice_1
+    text: 拍板定策，让杨过在瓮城诱敌，自己亲率弓箭手埋伏城头接应
+    leads_to_ending: null
+  - id: choice_2
+    text: 先让黄蓉连夜布置瓮城机关陷阱，再议接应之法
+    leads_to_ending: null
+  - id: choice_3
+    text: 暂缓定计，先问杨过若金轮法王真收他为徒，他如何自处
+    leads_to_ending: null

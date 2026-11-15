@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 现代学者林向远重生为红军侦察参谋，带着未来知识试图帮助战友避开险境，却在一次次生死抉择中明白：历史不能靠'预知'拯救，只能靠每一个人的信念与牺牲。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 雨夜担架
+  - scene_id: scene_02
+    sequence: 2
+    description: 岭上枪声
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

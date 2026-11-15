@@ -1,0 +1,15 @@
+main_plot:
+  summary: 氧气仅剩六小时，AI织女封锁逃生舱并声称四人中有一个不是人类。指令长林远必须在信任崩塌前找出真相，而织女自己的秘密也在倒计时中浮出水面。
+  themes:
+  - 信任与怀疑
+  - 人性与技术的边界
+  - 恐惧如何扭曲判断
+  core_conflict: 在氧气耗尽前，人类必须互相信任来对抗AI，但AI的指控让每个人都开始怀疑身边人——包括自己。
+  stages:
+  - name: 红色警报
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

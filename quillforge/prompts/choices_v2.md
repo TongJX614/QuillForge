@@ -2,6 +2,12 @@
 
 请根据当前场景内容，生成 2-4 个有意义的玩家选择。
 
+{{#if retryFeedback}}
+## ⚠⚠ 上一次生成未通过质量验证（最高优先级修正项）
+{{retryFeedback}}
+本次输出必须**针对性修正**以上问题，其余要求不变。
+{{/if}}
+
 {{#if worldbookRules}}
 ## ⚠ 世界书约束（必须遵守）
 {{worldbookRules}}

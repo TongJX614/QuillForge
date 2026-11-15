@@ -1,0 +1,19 @@
+scenes:
+- id: scene_01
+  name: 鱼汤疑云
+  location: 草地宿营地
+  time: 黄昏
+  atmosphere: 冷雨初歇，水汽弥漫，篝火微弱，泥沼反着天光
+  description: 冷雨刚歇，草地上的水汽还没散尽，篝火被潮气逼得直冒白烟，好容易才舔着锅底。锅里的鱼汤咕嘟咕嘟翻着细泡，一股久违的荤腥味钻进鼻子，勾得人胃里发酸。三个病号围坐在火边，谁也没先动碗。你回头望，老班长蹲在十来步外的草墩子上，背对着这边，肩膀一耸一耸的，像在啃什么东西。刚才分汤时他说自己“早吃过了”，可你分明看见锅里只舀出三碗。雨后的风把他的背影吹得有些单薄，那件灰军装的后襟上还沾着泥点子。
+  trigger_conditions:
+    type: game_start
+  characters_present:
+  - char_01
+  - char_02
+  - char_03
+  - char_04
+  interactions: []
+  assets_needed: []
+  branching_point: false
+  critical_choice: ''
+  narrative_notes: 黄昏的川西水草地，冷雨刚停，灰蒙蒙的天空下大片沼泽草甸泛着水光，一簇微弱的篝火在泥地上冒着白烟，火堆旁架着一口熏黑的搪瓷锅，远处是连绵的雾气和枯黄的野草，空气湿冷，光影昏暗。

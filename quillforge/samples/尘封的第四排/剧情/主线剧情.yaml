@@ -1,0 +1,20 @@
+main_plot:
+  summary: 旧剧团解散十年后重聚排最后一场戏，道具箱里多出一张第四排的旧戏票，无人认领。三人追查票根来源，逐渐揭开当年解散时被掩埋的隐情。
+  themes:
+  - 记忆与释怀
+  - 告别与重建
+  - 普通人的舞台尊严
+  core_conflict: 沈砚秋想查清戏票的来历以了却执念，而追查过程不断触碰剧团解散时每个人不愿重提的旧伤。
+  stages:
+  - name: 道具箱底的戏票
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 财务室的存根
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

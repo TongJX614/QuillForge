@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 记者周晚为查姐姐失踪真相登上7路末班车，乘客接连无声消失，她必须在第七站前找出规律，决定带谁下车。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 第七站之前
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

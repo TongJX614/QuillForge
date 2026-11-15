@@ -171,6 +171,9 @@ class GameSession:
         # 会话级互斥锁：FastAPI 同步路由在线程池中并发执行，
         # 防止同一会话的 generate/choose 并发交错破坏状态
         self._lock = threading.RLock()
+        # 流式生成进行中标记：流式期间不持有锁（否则 SSE 全程阻塞其他操作），
+        # 用该标记防止同一会话并发触发第二次生成
+        self._generating = False
 
     @property
     def total_scenes(self) -> int:
@@ -230,62 +233,71 @@ class GameSession:
         }
 
     def generate_stream(self, harness: Harness):
-        """流式生成：逐阶段 yield SSE 事件，完成后更新会话状态"""
+        """流式生成：逐阶段 yield SSE 事件，完成后更新会话状态。
+
+        锁策略：仅在状态校验/输入构建/结果落盘时持锁，LLM 流式期间不持锁，
+        避免长生成期间阻塞同会话的其他请求（用 _generating 标记防并发重入）。
+        """
         with self._lock:
-            yield from self._generate_stream_locked(harness)
+            if self._generating:
+                yield {"event": "error", "message": "当前场景正在生成中，请勿重复请求"}
+                return
+            if self.state == SessionState.GENERATED:
+                yield {"event": "error", "message": "当前场景已生成，请先做出选择后才能继续"}
+                return
+            if self.state == SessionState.FINISHED:
+                yield {"event": "error", "message": "故事已结束"}
+                return
+            if self.current_scene_index >= self.total_scenes:
+                yield {"event": "error", "message": "没有更多场景"}
+                return
 
-    def _generate_stream_locked(self, harness: Harness):
-        if self.state == SessionState.GENERATED:
-            yield {"event": "error", "message": "当前场景已生成，请先做出选择后才能继续"}
-            return
-        if self.state == SessionState.FINISHED:
-            yield {"event": "error", "message": "故事已结束"}
-            return
-        if self.current_scene_index >= self.total_scenes:
-            yield {"event": "error", "message": "没有更多场景"}
-            return
+            self._generating = True
 
-        player_choice = ""
-        if self.history:
-            player_choice = self.history[-1].get("player_choice", "")
+            player_choice = ""
+            if self.history:
+                player_choice = self.history[-1].get("player_choice", "")
 
-        harness_input = self.adapter.build_harness_input(
-            self.current_scene_index,
-            player_choice=player_choice,
-            previous_context=self.previous_result.get("data") if self.previous_result else None,
-            choice_history=self.history or None,
-            player_state=self.player_state.format_for_prompt() or None,
-        )
+            harness_input = self.adapter.build_harness_input(
+                self.current_scene_index,
+                player_choice=player_choice,
+                previous_context=self.previous_result.get("data") if self.previous_result else None,
+                choice_history=self.history or None,
+                player_state=self.player_state.format_for_prompt() or None,
+            )
 
-        scene = self.adapter.scenes[self.current_scene_index] if self.current_scene_index < len(self.adapter.scenes) else {}
-        script_choices = self.adapter.get_scene_choices(self.current_scene_index, choice_history=self.history or None)
+            scene = self.adapter.scenes[self.current_scene_index] if self.current_scene_index < len(self.adapter.scenes) else {}
+            script_choices = self.adapter.get_scene_choices(self.current_scene_index, choice_history=self.history or None)
 
-        def _meta_event() -> dict:
-            return {
-                "event": "meta",
-                "scene_meta": {
-                    "scene_id": scene.get("id", ""),
-                    "scene_name": scene.get("name", f"场景 {self.current_scene_index + 1}"),
-                    "location": scene.get("location", ""),
-                    "scene_index": self.current_scene_index + 1,
-                    "total_scenes": self.total_scenes,
-                },
-                "available_choices": script_choices,
-                "session_state": self.state.value,
-                "progress": round(self.progress, 2),
-            }
+        try:
+            def _meta_event() -> dict:
+                return {
+                    "event": "meta",
+                    "scene_meta": {
+                        "scene_id": scene.get("id", ""),
+                        "scene_name": scene.get("name", f"场景 {self.current_scene_index + 1}"),
+                        "location": scene.get("location", ""),
+                        "scene_index": self.current_scene_index + 1,
+                        "total_scenes": self.total_scenes,
+                    },
+                    "available_choices": script_choices,
+                    "session_state": self.state.value,
+                    "progress": round(self.progress, 2),
+                }
 
-        yield _meta_event()
+            yield _meta_event()
 
-        result = None
-        for evt in harness.run_stream(harness_input):
-            if evt.get("event") == "done":
-                result = evt.get("result")
-            yield evt
-
-        if result:
-            self.current_result = result
-            self.state = SessionState.GENERATED
+            result = None
+            for evt in harness.run_stream(harness_input):
+                if evt.get("event") == "done":
+                    result = evt.get("result")
+                yield evt
+        finally:
+            with self._lock:
+                if result:
+                    self.current_result = result
+                    self.state = SessionState.GENERATED
+                self._generating = False
 
         yield _meta_event()
 
@@ -294,6 +306,8 @@ class GameSession:
             return self._choose_locked(choice_index, choice_text)
 
     def _choose_locked(self, choice_index: int, choice_text: str) -> dict:
+        if self._generating:
+            raise HTTPException(400, "当前场景正在生成中，请稍候")
         if self.state != SessionState.GENERATED:
             raise HTTPException(400, f"当前状态为 {self.state.value}，无法做出选择")
 

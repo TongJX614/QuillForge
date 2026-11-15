@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 工程师林越在舱壁检修时捕捉到规律敲击声，站长坚称是设备共振。当声呐证实外部有移动物体时，空间站内部开始分裂，而敲击声越来越近。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 舱壁上的敲击
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

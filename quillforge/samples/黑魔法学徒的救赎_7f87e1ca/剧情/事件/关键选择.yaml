@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 锁链下的低语
+  description: ''
+  options:
+  - id: choice_1
+    text: 追问米娅更多细节，试图拼出那个'体面长袍'之人的身份
+    leads_to_ending: null
+  - id: choice_2
+    text: 先说服卡厄斯一起检查符文，用导师的经验降低风险
+    leads_to_ending: null
+  - id: choice_3
+    text: 趁卡厄斯不备，独自完成修补阵纹的最后一步
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 井边的长袍
+  description: ''
+  options:
+  - id: choice_1
+    text: 让莉娜去暗室，她认得格雷姆的做派，也许能更快认出关键线索。
+    leads_to_ending: null
+  - id: choice_2
+    text: 劝说米娅去暗室，灵体不怕机关与旧咒，而且她自己的记忆或许能呼应那些档案。
+    leads_to_ending: null
+  - id: choice_3
+    text: 先问清卡厄斯那枚铜钥匙的代价，再决定谁去。
+    leads_to_ending: null

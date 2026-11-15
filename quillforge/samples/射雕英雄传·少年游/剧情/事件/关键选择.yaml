@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 张家口·一碗面
+  description: ''
+  options:
+  - id: choice_1
+    text: 老老实实说出自己的想法：先找到段天德，问清真相，再堂堂正正讨个说法。
+    leads_to_ending: null
+  - id: choice_2
+    text: 谨慎地反问：你一个小乞丐，怎么会知道金国王府的事？
+    leads_to_ending: null
+  - id: choice_3
+    text: 摇摇头说：报仇的事俺自己来，不想连累旁人。
+    leads_to_ending: null

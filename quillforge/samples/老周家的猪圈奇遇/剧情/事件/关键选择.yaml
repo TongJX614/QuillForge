@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 猪圈惊变
+  description: ''
+  options:
+  - id: choice_1
+    text: 听大花的，先挤到食槽边吃东西，观察老周的反应
+    leads_to_ending: null
+  - id: choice_2
+    text: 趁着老周还没走近，拼命用蹄子刨地弄出声响引起注意
+    leads_to_ending: null
+  - id: choice_3
+    text: 悄悄往猪圈角落退，竖起耳朵偷听老周和可能到来的周小军说话
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 食槽边的暗战
+  description: ''
+  options:
+  - id: choice_1
+    text: 趁周小军还在栏边，拼命做出讨喜的举动，吸引他夸你
+    leads_to_ending: null
+  - id: choice_2
+    text: 先跟大花打听清楚，前六个说'真香'的人后来都怎么样了
+    leads_to_ending: null
+  - id: choice_3
+    text: 夜里等人都走了，试着在猪圈里找找有没有别的出路
+    leads_to_ending: null

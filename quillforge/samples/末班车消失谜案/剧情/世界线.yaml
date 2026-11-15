@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 末班公交车上乘客接连消失，林悦联合司机老陈和高中生小雅，发现是五年前事故司机的怨灵作祟。三人必须在到终点站前化解怨灵执念，拯救全车人。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 末班车启程
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

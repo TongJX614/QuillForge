@@ -18,7 +18,7 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
 from logger import get_logger
-from schemas import HarnessInput, AssembledContext, Dialogue
+from schemas import HarnessInput, AssembledContext, Dialogue, Choice
 from ..fixtures import PreparedContext
 from ..sut import NarrativeSUT
 from .base import StageBase
@@ -27,7 +27,7 @@ logger = get_logger("stage.dialogue")
 
 
 class DialogueStage(StageBase):
-    """Stage 3: 生成角色对话"""
+    """Stage 3: 生成角色对话（并在同一次 LLM 调用末尾附带产出玩家选项）"""
 
     @property
     def name(self) -> str:
@@ -44,40 +44,59 @@ class DialogueStage(StageBase):
         input_data: HarnessInput,
         extra: dict,
         narration: str = "",
-    ) -> list[Dialogue]:
-        """非流式生成对话"""
-        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, narration, sut)
+        feedback: str = "",
+    ) -> tuple[list[Dialogue], list[Choice]]:
+        """非流式生成对话，返回 (dialogues, merged_choices)。
+
+        merged_choices 是同一 LLM 输出末尾附带的选项（type=choices 对象），
+        可能为空列表；为空时由调用方回退到独立的 ChoicesStage 调用。
+        """
+        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, narration, sut, feedback=feedback)
         dialogues: list[Dialogue] = []
+        merged_choices: list[Choice] = []
 
         try:
-            raw_dialogues = sut.call_json(ctx.rendered_system_prompt, user_prompt)
+            raw_dialogues = sut.call_json(ctx.rendered_system_prompt, user_prompt,
+                                          model=input_data.options.model or "")
         except (ValueError, json.JSONDecodeError, KeyError) as e:
             logger.info("  [DIALOGUE] LLM JSON 解析失败: %s", e)
-            return dialogues
+            return dialogues, merged_choices
 
         if isinstance(raw_dialogues, list):
             valid_speakers = {c.name for c in ctx.assembled.active_characters}
             speaker_map = self._build_speaker_map(ctx.assembled.active_characters)
             filtered_count = 0
             for d in raw_dialogues:
-                if isinstance(d, dict):
-                    speaker = d.get("speaker", "").strip()
-                    speaker = speaker_map.get(speaker, speaker)
-                    speaker = speaker_map.get(speaker.lower(), speaker)
-                    if speaker not in valid_speakers:
-                        filtered_count += 1
-                        logger.debug("  [FILTER] 过滤 speaker: '%s' (合法: %s)", speaker, valid_speakers)
-                        continue
-                    dialogues.append(Dialogue(
-                        speaker=speaker,
-                        text=d.get("text", ""),
-                        emotion=d.get("emotion", ""),
-                    ))
-            logger.info("  [DIALOGUE] LLM生成 %d 轮, 过滤 %d 轮, 保留 %d 轮", len(raw_dialogues), filtered_count, len(dialogues))
+                if not isinstance(d, dict):
+                    continue
+                # 对话末尾附带的选项对象
+                if str(d.get("type", "")).strip().lower() == "choices":
+                    for c in d.get("choices", []):
+                        if isinstance(c, dict):
+                            merged_choices.append(Choice(
+                                text=c.get("text", ""),
+                                effect=c.get("effect", ""),
+                                worldline_impact=c.get("worldlineImpact", "advance"),
+                            ))
+                    continue
+                speaker = d.get("speaker", "").strip()
+                speaker = speaker_map.get(speaker, speaker)
+                speaker = speaker_map.get(speaker.lower(), speaker)
+                if speaker not in valid_speakers:
+                    filtered_count += 1
+                    logger.debug("  [FILTER] 过滤 speaker: '%s' (合法: %s)", speaker, valid_speakers)
+                    continue
+                dialogues.append(Dialogue(
+                    speaker=speaker,
+                    text=d.get("text", ""),
+                    emotion=d.get("emotion", ""),
+                ))
+            logger.info("  [DIALOGUE] LLM生成 %d 轮, 过滤 %d 轮, 保留 %d 轮, 附带选项 %d 个",
+                        len(raw_dialogues), filtered_count, len(dialogues), len(merged_choices))
         else:
             logger.warning("  [DIALOGUE] LLM返回非列表类型: %s", type(raw_dialogues).__name__)
 
-        return dialogues
+        return dialogues, merged_choices
 
     def execute_stream(
         self,
@@ -86,9 +105,14 @@ class DialogueStage(StageBase):
         input_data: HarnessInput,
         extra: dict,
         narration: str = "",
+        feedback: str = "",
     ) -> Generator[dict, None, list[Dialogue]]:
-        """流式生成对话 + 穿插动作/心理旁白，逐个 yield 字典项"""
-        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, narration, sut)
+        """流式生成对话 + 穿插动作/心理旁白，逐个 yield 字典项。
+
+        产出项：{"kind": "dialogue"|"action"|"choices", ...}；
+        choices 项在 LLM 输出末尾附带选项时最后产出一次。
+        """
+        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, narration, sut, feedback=feedback)
         valid_speakers = {c.name for c in ctx.assembled.active_characters}
         speaker_map = self._build_speaker_map(ctx.assembled.active_characters)
 
@@ -97,11 +121,27 @@ class DialogueStage(StageBase):
         filtered_count = 0
         action_count = 0
 
-        for d in sut.call_json_stream(ctx.rendered_system_prompt, user_prompt):
+        for d in sut.call_json_stream(ctx.rendered_system_prompt, user_prompt,
+                                      model=input_data.options.model or ""):
             if not isinstance(d, dict):
                 continue
             text = str(d.get("text", "")).strip()
             dtype = str(d.get("type", "")).strip().lower()
+
+            # 对话末尾附带的选项对象
+            if dtype == "choices":
+                merged_choices = []
+                for c in d.get("choices", []):
+                    if isinstance(c, dict):
+                        merged_choices.append(Choice(
+                            text=c.get("text", ""),
+                            effect=c.get("effect", ""),
+                            worldline_impact=c.get("worldlineImpact", "advance"),
+                        ))
+                if merged_choices:
+                    yield {"kind": "choices", "choices": merged_choices}
+                continue
+
             speaker = str(d.get("speaker", "")).strip()
             speaker = speaker_map.get(speaker, speaker)
             speaker = speaker_map.get(speaker.lower(), speaker)
@@ -142,6 +182,7 @@ class DialogueStage(StageBase):
         extra: dict,
         narration: str,
         sut: NarrativeSUT,
+        feedback: str = "",
     ) -> str:
         """构建对话生成的 user prompt"""
         opts = inp.options
@@ -150,6 +191,7 @@ class DialogueStage(StageBase):
             "narration": narration,
             "characters": assembled.active_characters,
             "annotatedWorldline": assembled.annotated_worldline,
+            "worldline": assembled.raw_worldline,
             "currentNode": assembled.current_node,
             "nextNode": assembled.next_node or "（终局）",
             "worldlineProgress": int(assembled.worldline_progress * 100),
@@ -158,6 +200,7 @@ class DialogueStage(StageBase):
             "minDialogues": opts.dialogue_count_min,
             "maxDialogues": opts.dialogue_count_max,
             "previousDialogues": inp.previous_context.dialogues if inp.previous_context else [],
+            "retryFeedback": feedback,
         })
         return sut.render_template(sut.prompts["dialogue"], variables)
 

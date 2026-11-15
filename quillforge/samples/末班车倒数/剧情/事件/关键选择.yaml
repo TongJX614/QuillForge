@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 零点发车
+  description: ''
+  options:
+  - id: choice_1
+    text: 先把报站器的时钟调回正常，再问老周规矩
+    leads_to_ending: null
+  - id: choice_2
+    text: 直接走到车尾，问那个红雨衣女人到底是谁
+    leads_to_ending: null
+  - id: choice_3
+    text: 让苏小满盯着人数，自己继续开车，到下一站再说
+    leads_to_ending: null

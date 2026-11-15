@@ -21,8 +21,9 @@
 
 /* Galgame VN Stage */
 .vn-stage{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
-.vn-bg{position:absolute;inset:0;background-color:#101116;background-size:cover;background-position:center;background-repeat:no-repeat;transition:background-color .5s}
+.vn-bg{position:absolute;inset:0;background-color:#101116;background-size:cover;background-position:center;background-repeat:no-repeat;transition:background-color .5s,filter .7s ease,transform .7s ease}
 .vn-bg.vn-bg-shift{top:50px}
+.vn-bg.vn-bg-pending{filter:blur(12px) brightness(.55);transform:scale(1.06)}
 .vn-sprites{position:absolute;inset:0;pointer-events:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 1% 70px}
 .vn-sprite{width:400px;height:720px;max-height:80vh;border-radius:16px 16px 0 0;transition:all .4s ease;position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column}
 .vn-sprite .sprite-body{width:180px;height:500px;background:#5a6470;border-radius:60px 60px 20px 20px;opacity:.7;box-shadow:0 8px 32px rgba(0,0,0,.25)}
@@ -105,6 +106,7 @@
 .vn-top-bar button.active{color:var(--accent);background:rgba(197,162,101,.12);box-shadow:inset 0 0 8px rgba(197,162,101,.10)}
 .vn-streaming-hint{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
 .vn-streaming-hint .spinner{width:16px;height:16px;border-width:2px}
+.vn-stage-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:18;display:flex;align-items:center;gap:10px;padding:14px 22px;border-radius:12px;background:rgba(18,20,26,.82);border:1px solid rgba(197,162,101,.25);color:var(--muted);font-size:14px;pointer-events:none}
 /* 结局画面 */
 .vn-ending-overlay{position:absolute;inset:0;z-index:40;background:radial-gradient(ellipse at center,rgba(38,32,22,.82) 0%,rgba(18,16,12,.92) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;cursor:pointer;transition:opacity .5s;backdrop-filter:blur(6px)}
 .ending-type{font-size:14px;font-weight:600;letter-spacing:3px;padding:6px 24px;border:1px solid;border-radius:0;clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,10px 100%,0 50%);animation:endingFadeIn .9s ease both}
@@ -131,18 +133,6 @@
 .loading{display:flex;align-items:center;justify-content:center;padding:40px;gap:12px;color:var(--muted)}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* 素材加载等待遮罩 */
-.vn-asset-gate{position:absolute;inset:0;z-index:35;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:radial-gradient(ellipse at 50% 40%,#1a1814 0%,#121318 70%);opacity:1;transition:opacity .6s ease;pointer-events:none}
-.vn-asset-gate.hidden{opacity:0;visibility:hidden}
-.vn-gate-quill{width:48px;height:48px;position:relative;animation:quillFloat 2.4s ease-in-out infinite}
-.vn-gate-quill::before{content:'✦';font-size:40px;color:var(--accent);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-shadow:0 0 20px rgba(197,162,101,.5)}
-.vn-gate-quill::after{content:'';position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:32px;height:6px;background:radial-gradient(ellipse,rgba(197,162,101,.25),transparent);border-radius:50%;animation:quillShadow 2.4s ease-in-out infinite}
-@keyframes quillFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-@keyframes quillShadow{0%,100%{transform:translateX(-50%) scaleX(1);opacity:.6}50%{transform:translateX(-50%) scaleX(.6);opacity:.3}}
-.vn-gate-text{color:var(--muted);font-size:13px;letter-spacing:2px;font-family:var(--font-serif)}
-.vn-gate-bar{width:120px;height:2px;background:var(--border);border-radius:2px;overflow:hidden}
-.vn-gate-bar::after{content:'';display:block;width:40%;height:100%;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:gateSlide 1.5s ease-in-out infinite}
-@keyframes gateSlide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
 /* History */
 .history-panel{position:fixed;top:60px;right:16px;z-index:1100;width:min(420px,86vw);background:rgba(22,24,30,.95);border:1px solid var(--border-hover);border-radius:12px;padding:16px;max-height:400px;overflow-y:auto;display:none;backdrop-filter:blur(10px)}
 .history-panel.show{display:block}
@@ -212,56 +202,7 @@ let vnCurrentAudioLineIdx = -1; // 当前播放音频对应的行索引
 // 美术素材
 let vnAssets = { characters: {}, scenes: {}, enabled: false };
 
-// ─── 素材门控：背景/立绘未到位时阻塞剧情推进 ───
-let _bgGateResolve = null;   // 当前等待背景加载的 resolve
-let _charGateResolve = null; // 当前等待立绘加载的 resolve
-let _charGateName = null;    // 正在等待的角色名
-let _vnAssetGateActive = false; // 素材门控进行中，禁止用户推进
-
-function showAssetGate() {
-  _vnAssetGateActive = true;
-  const el = document.getElementById('vnAssetGate');
-  if (el) el.classList.remove('hidden');
-}
-function hideAssetGate() {
-  _vnAssetGateActive = false;
-  const el = document.getElementById('vnAssetGate');
-  if (el) el.classList.add('hidden');
-}
-
-function waitForBackground(meta) {
-  // 如果背景 URL 已存在，直接通过
-  if (!meta || (!meta.scene_id && !meta.scene_name)) return Promise.resolve();
-  const url = vnAssets.scenes[meta.scene_id] || vnAssets.scenes[meta.scene_name];
-  if (url) return Promise.resolve();
-  // 否则阻塞，等 asset_bg_ready 事件解除（超时 20s 自动放行）
-  return new Promise(resolve => {
-    _bgGateResolve = resolve;
-    setTimeout(() => { if (_bgGateResolve === resolve) { _bgGateResolve = null; resolve(); } }, 20000);
-  });
-}
-
-function waitForCharacterSprite(name) {
-  if (!name) return Promise.resolve();
-  const url = vnAssets.characters[name];
-  if (url) return Promise.resolve();
-  // 阻塞，等 asset_char_ready 事件解除（超时 15s 自动放行）
-  return new Promise(resolve => {
-    _charGateResolve = resolve;
-    _charGateName = name;
-    setTimeout(() => { if (_charGateName === name) { _charGateResolve = null; _charGateName = null; resolve(); } }, 15000);
-  });
-}
-
-function releaseBgGate(sceneId, sceneName) {
-  if (_bgGateResolve) { const r = _bgGateResolve; _bgGateResolve = null; r(); }
-}
-
-function releaseCharGate(charName) {
-  if (_charGateResolve && _charGateName === charName) {
-    const r = _charGateResolve; _charGateResolve = null; _charGateName = null; r();
-  }
-}
+// ─── 素材策略：背景/立绘未到位时不阻塞文本展示，素材就绪后自动热更新 ───
 
 // 文字生成流缓冲
 let _textEventBuffer = [];
@@ -281,15 +222,13 @@ let realtimeMode = false;
 
 // ─── 渲染 VN 舞台（空对话框 + 加载提示）───
 function renderVNStage(progress = 0, sceneInfo = '生成中...') {
+  // 新场景背景图尚未就绪时，沿用上一张背景（模糊压暗）并等待热更新，
+  // 避免舞台重建后出现长时间纯黑空镜。
+  const prevBgImage = document.getElementById('vnBg')?.style.backgroundImage || '';
   app.innerHTML = `
     <div class="vn-stage" id="vnStage">
       <div class="vn-progress" id="vnProgress" style="width:${progress*100}%"></div>
       <div class="vn-bg vn-bg-shift" id="vnBg"></div>
-      <div class="vn-asset-gate hidden" id="vnAssetGate">
-        <div class="vn-gate-quill"></div>
-        <div class="vn-gate-text">画面加载中</div>
-        <div class="vn-gate-bar"></div>
-      </div>
       <div class="vn-scene-info" id="vnSceneInfo">${sceneInfo}</div>
       <div class="vn-top-bar">
         <button id="vnVoiceBtn" class="active">声音:开</button>
@@ -298,6 +237,7 @@ function renderVNStage(progress = 0, sceneInfo = '生成中...') {
         <button id="vnHomeBtn">退出</button>
       </div>
       <div class="vn-sprites" id="vnSprites"></div>
+      <div class="vn-stage-loading" id="vnStageLoading" style="display:none"><div class="spinner"></div><span id="vnStageLoadingMsg">正在生成场景...</span></div>
       <div class="vn-dialogue-box" id="vnDialogueBox" style="visibility:hidden">
         <div id="vnSpeaker"></div>
         <div class="vn-text" id="vnText"><div class="vn-streaming-hint"><div class="spinner"></div><span id="vnStageMsg">正在连接...</span></div></div>
@@ -314,6 +254,14 @@ function renderVNStage(progress = 0, sceneInfo = '生成中...') {
     </div>
     <div class="history-panel" id="historyPanel"></div>`;
 
+  if (prevBgImage) {
+    const bgEl = document.getElementById('vnBg');
+    if (bgEl) {
+      bgEl.style.backgroundImage = prevBgImage;
+      bgEl.classList.add('vn-bg-pending');
+    }
+  }
+
   document.getElementById('vnDialogueBox').addEventListener('click', vnAdvance);
   document.addEventListener('keydown', vnKeyHandler);
   document.getElementById('vnVoiceBtn').addEventListener('click', vnToggleVoice);
@@ -325,6 +273,19 @@ function renderVNStage(progress = 0, sceneInfo = '生成中...') {
     document.removeEventListener('keydown', vnKeyHandler);
     location.href = '/';
   });
+}
+
+function vnShowStageLoading(msg) {
+  const el = document.getElementById('vnStageLoading');
+  if (!el) return;
+  const m = document.getElementById('vnStageLoadingMsg');
+  if (m && msg) m.textContent = msg;
+  el.style.display = 'flex';
+}
+
+function vnHideStageLoading() {
+  const el = document.getElementById('vnStageLoading');
+  if (el) el.style.display = 'none';
 }
 
 // ─── 美术素材预生成（剧本管线）───
@@ -405,24 +366,26 @@ async function pregenerateAssets(assetsUrl) {
             if (fillEl()) fillEl().style.width = '100%';
             showEnterHint();
           } else if (evt.event === 'asset_bg_ready') {
-            if (evt.url && sessionId === mySessionId) {
-              if (evt.scene_id) vnAssets.scenes[evt.scene_id] = evt.url;
-              if (evt.scene_name && evt.scene_name !== evt.scene_id) vnAssets.scenes[evt.scene_name] = evt.url;
-              vnApplyBackground(vnState.meta);
-              releaseBgGate(evt.scene_id, evt.scene_name);
+            if (sessionId === mySessionId) {
+              if (evt.url) {
+                if (evt.scene_id) vnAssets.scenes[evt.scene_id] = evt.url;
+                if (evt.scene_name && evt.scene_name !== evt.scene_id) vnAssets.scenes[evt.scene_name] = evt.url;
+                vnApplyBackground(vnState.meta);
+              }
             }
           } else if (evt.event === 'asset_char_ready') {
-            if (evt.url && sessionId === mySessionId) {
-              vnAssets.characters[evt.char_name] = evt.url;
-              releaseCharGate(evt.char_name);
+            if (sessionId === mySessionId && evt.char_name) {
+              if (evt.url) vnAssets.characters[evt.char_name] = evt.url;
               // 角色已在舞台上（有位置但无 DOM）→ 补建立绘
-              const spritesEl = document.getElementById('vnSprites');
-              if (spritesEl && evt.char_name in vnCharPos && !spritesEl.querySelector(`[data-char="${evt.char_name}"]`)) {
-                const div = document.createElement('div');
-                div.className = `vn-sprite pos-${vnCharPos[evt.char_name]} dimmed`;
-                div.dataset.char = evt.char_name;
-                div.innerHTML = `<img class="sprite-img" src="${evt.url}" alt="${evt.char_name}"><div class="sprite-label">${evt.char_name}</div>`;
-                spritesEl.appendChild(div);
+              if (evt.url) {
+                const spritesEl = document.getElementById('vnSprites');
+                if (spritesEl && evt.char_name in vnCharPos && !spritesEl.querySelector(`[data-char="${evt.char_name}"]`)) {
+                  const div = document.createElement('div');
+                  div.className = `vn-sprite pos-${vnCharPos[evt.char_name]} dimmed`;
+                  div.dataset.char = evt.char_name;
+                  div.innerHTML = `<img class="sprite-img" src="${evt.url}" alt="${evt.char_name}"><div class="sprite-label">${evt.char_name}</div>`;
+                  spritesEl.appendChild(div);
+                }
               }
             }
           } else if (evt.event === 'assets_done') {
@@ -449,7 +412,11 @@ function vnApplyBackground(meta) {
   // 预加载完成后再设置背景，返回 Promise 等待图片真正加载完成
   return new Promise(resolve => {
     const img = new Image();
-    img.onload = () => { bgEl.style.backgroundImage = `url(${url})`; resolve(); };
+    img.onload = () => {
+      bgEl.style.backgroundImage = `url(${url})`;
+      bgEl.classList.remove('vn-bg-pending');
+      resolve();
+    };
     img.onerror = () => { resolve(); }; // 加载失败也放行，不能一直卡住
     img.src = url;
   });
@@ -543,6 +510,7 @@ async function generateSceneStream(textStreamPromise) {
   vnStopAudio();
   vnAudioQueue = [];
   renderVNStage(0);
+  vnShowStageLoading('正在生成场景...');
 
   try {
     if (textStreamPromise) {
@@ -581,6 +549,8 @@ function handleStreamEvent(evt) {
   switch(type) {
     case 'stage':
       if (stageMsgEl) stageMsgEl.textContent = evt.message || '生成中...';
+      const stageLoadMsg = document.getElementById('vnStageLoadingMsg');
+      if (stageLoadMsg) stageLoadMsg.textContent = evt.message || '生成中...';
       break;
     case 'narration_start':
       vnNarrationStreaming = true;
@@ -685,11 +655,8 @@ async function vnTryStartDisplay() {
     vnStreamStarted = true;
     const speakerEl = document.getElementById('vnSpeaker');
     if (speakerEl) speakerEl.innerHTML = '';
-    // 等待背景素材到位后再开始显示（显示加载遮罩）
-    showAssetGate();
-    await waitForBackground(vnState.meta);
-    await vnApplyBackground(vnState.meta);
-    hideAssetGate();
+    // 文字不阻塞在背景素材上：先展示文本，背景就绪后由 asset_bg_ready 热更新
+    void vnApplyBackground(vnState.meta);
     vnShowLine(0);
   }
 }
@@ -700,6 +667,7 @@ function vnKeyHandler(e) {
 
 // ─── 打字机效果 ───
 async function vnShowLine(idx) {
+  vnHideStageLoading();
   vnLineStartTime = Date.now();
   const { queue } = vnState;
   if (idx >= queue.length) {
@@ -709,20 +677,9 @@ async function vnShowLine(idx) {
   }
   vnState.idx = idx;
   const line = queue[idx];
-  // 每个场景的第一行：等待背景素材到位
+  // 对话行：立绘未就绪不再阻塞展示，asset_char_ready 到达后自动补上立绘
   if (idx === 0) {
-    const meta = vnState.meta;
-    const bgReady = meta && (vnAssets.scenes[meta.scene_id] || vnAssets.scenes[meta.scene_name]);
-    if (!bgReady) showAssetGate();
-    await waitForBackground(meta);
-    await vnApplyBackground(meta);
-    hideAssetGate();
-  }
-  // 对话行：等待该角色立绘到位后再显示（不显示全屏遮罩，仅锁定推进）
-  if (line.type === 'dialogue' && line.speaker) {
-    _vnAssetGateActive = true;
-    await waitForCharacterSprite(line.speaker);
-    _vnAssetGateActive = false;
+    await vnApplyBackground(vnState.meta);
   }
   if (idx === 0 && line.type === 'narration' && !vnPopupShownThisScene && document.getElementById('vnNarrationPopup')) {
     vnShowNarrationPopup(line); return;
@@ -841,6 +798,7 @@ function vnShowWaiting() {
 // ─── 错误模式：生成失败/断流，禁止推进，点击对话框返回首页 ───
 function vnEnterErrorMode(message) {
   vnErrorMode = true;
+  vnHideStageLoading();
   vnWaiting = false;
   clearTimeout(vnWaitingTimer); vnWaitingTimer = null;
   clearInterval(typewriterTimer);
@@ -870,6 +828,7 @@ function vnResumeFromWaiting() {
 }
 
 function vnShowNarrationPopup(line) {
+  vnHideStageLoading();
   vnLineStartTime = Date.now();
   vnPopupActive = true;
   vnPopupShownThisScene = true;
@@ -930,15 +889,25 @@ function vnScheduleAutoAdvance() {
   clearTimeout(vnAutoPlayTimer);
   if (!vnAutoPlay) return;
   const twDone = vnPopupActive ? vnPopupTypewriterDone : typewriterDone;
-  if (!twDone) return;
+  if (!twDone) { vnAutoRetry(1000); return; }
   const { idx, queue } = vnState;
-  if (idx >= queue.length - 1 && !vnStreamDone) return;
-  if (vnTtsEnabled && vnCurrentAudio) return;
+  if (idx >= queue.length - 1 && !vnStreamDone) { vnAutoRetry(1500); return; }
+  if (vnTtsEnabled && vnCurrentAudio) { vnAutoRetry(800); return; }
   const len = (queue[idx] && queue[idx].text) ? queue[idx].text.length : 0;
   const delay = Math.min(6000, 700 + len * 45);
   const elapsed = Date.now() - vnLineStartTime;
   const finalDelay = Math.max(delay, 1000 - elapsed);
   vnAutoPlayTimer = setTimeout(() => vnAdvance(), finalDelay);
+}
+// 自动播放看门狗：临时状态（打字中/等流/音频播放中/停留期）下周期性重试，避免链条断裂后永久卡死
+function vnAutoRetry(delay) {
+  if (!vnAutoPlay) return;
+  clearTimeout(vnAutoPlayTimer);
+  vnAutoPlayTimer = setTimeout(() => {
+    if (!vnAutoPlay) return;
+    if (vnTtsEnabled && vnCurrentAudio) { vnAutoRetry(800); return; }
+    vnAdvance();
+  }, delay);
 }
 
 // ─── TTS 语音播放 ───
@@ -986,9 +955,8 @@ function vnAdvance() {
   if (vnErrorMode) { location.href = '/'; return; }
   clearTimeout(vnAutoPlayTimer);
   vnStopAudio();
-  // 素材门控进行中，禁止用户推进
-  if (_vnAssetGateActive) return;
   if (vnWaiting) {
+    vnAutoRetry(1500);
     return;
   }
   if (vnEndingScrollActive) {
@@ -1017,10 +985,11 @@ function vnAdvance() {
       vnRefreshHint();
       return;
     }
-    if (line && line.streaming) return; // 旁白仍在流式接收中，禁止关闭弹窗
-    if (Date.now() - vnLineStartTime < 1000) return; // 强制1秒最小停留
+    if (line && line.streaming) { vnAutoRetry(1000); return; } // 旁白仍在流式接收中，禁止关闭弹窗
+    if (Date.now() - vnLineStartTime < 1000) { vnAutoRetry(Math.max(150, 1000 - (Date.now() - vnLineStartTime))); return; } // 强制1秒最小停留
     if (!vnStreamDone && vnState.idx >= vnState.queue.length - 1) {
       // 弹窗内显示“后续内容生成中”，点击忽略
+      vnAutoRetry(1500);
       return;
     }
     const popup = document.getElementById('vnNarrationPopup');
@@ -1040,12 +1009,14 @@ function vnAdvance() {
     if (textEl && line) { textEl.textContent = line.text; textEl.scrollTop = textEl.scrollHeight; }
     if (line) line.streaming = false;
     typewriterDone = true;
+    vnScheduleAutoAdvance();
     return;
   }
-  if (Date.now() - vnLineStartTime < 1000) return; // 强制1秒最小停留
+  if (Date.now() - vnLineStartTime < 1000) { vnAutoRetry(Math.max(150, 1000 - (Date.now() - vnLineStartTime))); return; } // 强制1秒最小停留
   if (!vnStreamDone && vnState.idx >= vnState.queue.length - 1) {
     // 已读完所有到达内容，流未结束：等待
     vnShowWaiting();
+    vnAutoRetry(1500);
     return;
   }
   const { idx, queue } = vnState;
@@ -1054,6 +1025,7 @@ function vnAdvance() {
 }
 
 function vnShowChoices() {
+  vnHideStageLoading();
   const { choices, sessionState } = vnState;
   const box = document.getElementById('vnDialogueBox');
   const overlay = document.getElementById('vnChoices');
@@ -1167,6 +1139,7 @@ function vnStartEndingScroll() {
 }
 
 function vnShowEndingFinal() {
+  vnHideStageLoading();
   // 实时管线中 vnEndingData 可能尚未就绪（等待 story_complete 事件），显示保存中状态
   if (!vnEndingData) {
     const box = document.getElementById('vnDialogueBox');
@@ -1298,8 +1271,11 @@ async function realtimeChooseInVN(choiceIndex) {
           try {
             const evt = JSON.parse(line.slice(6));
             if (evt.type === 'progress') {
+              const msg = evt.message || '生成中...';
               const el = document.getElementById('rtLoadingMsg');
-              if (el) el.textContent = evt.message || '生成中...';
+              if (el) el.textContent = msg;
+              const stageMsg = document.getElementById('vnStageLoadingMsg');
+              if (stageMsg) stageMsg.textContent = msg;
 
             } else if (evt.type === 'scene_start') {
               // ── 流式渲染：初始化 VN 场景 ──
@@ -1324,6 +1300,8 @@ async function realtimeChooseInVN(choiceIndex) {
               vnResetSprites(); vnStopAudio(); vnAudioQueue = [];
               renderVNStage(vnState.progress, `${vnState.meta.scene_name} ${vnState.meta.location?'\u00b7 '+vnState.meta.location:''}`);
               vnApplyBackground(vnState.meta);
+              // 舞台重建后选项层的加载提示已被清除，用舞台级提示衔接，直到首句文本到达
+              vnShowStageLoading('正在生成场景...');
               sceneRendered = true;
 
             } else if (evt.type === 'narration_delta') {
@@ -1432,22 +1410,22 @@ async function realtimeChooseInVN(choiceIndex) {
                 if (evt.scene_id) vnAssets.scenes[evt.scene_id] = evt.url;
                 if (evt.scene_name && evt.scene_name !== evt.scene_id) vnAssets.scenes[evt.scene_name] = evt.url;
                 if (sceneRendered) vnApplyBackground(vnState.meta);
-                releaseBgGate(evt.scene_id, evt.scene_name);
               }
             } else if (evt.event === 'asset_char_ready') {
-              if (evt.url && evt.char_name) {
-                vnAssets.characters[evt.char_name] = evt.url;
-                releaseCharGate(evt.char_name);
-                // 角色已在舞台上→补建立绘
-                const spritesEl = document.getElementById('vnSprites');
-                if (spritesEl && evt.char_name in vnCharPos && !spritesEl.querySelector(`[data-char="${evt.char_name}"]`)) {
-                  const div = document.createElement('div');
-                  div.className = `vn-sprite pos-${vnCharPos[evt.char_name]} dimmed`;
-                  div.dataset.char = evt.char_name;
-                  div.innerHTML = `<img class="sprite-img" src="${evt.url}" alt="${evt.char_name}"><div class="sprite-label">${evt.char_name}</div>`;
-                  spritesEl.appendChild(div);
+              if (evt.char_name) {
+                if (evt.url) {
+                  vnAssets.characters[evt.char_name] = evt.url;
+                  // 角色已在舞台上→补建立绘
+                  const spritesEl = document.getElementById('vnSprites');
+                  if (spritesEl && evt.char_name in vnCharPos && !spritesEl.querySelector(`[data-char="${evt.char_name}"]`)) {
+                    const div = document.createElement('div');
+                    div.className = `vn-sprite pos-${vnCharPos[evt.char_name]} dimmed`;
+                    div.dataset.char = evt.char_name;
+                    div.innerHTML = `<img class="sprite-img" src="${evt.url}" alt="${evt.char_name}"><div class="sprite-label">${evt.char_name}</div>`;
+                    spritesEl.appendChild(div);
+                  }
                 }
-              }
+                }
             }
           } catch(pe) { if (pe.message && !pe.message.includes('JSON')) throw pe; }
         }
@@ -1463,10 +1441,12 @@ async function realtimeChooseInVN(choiceIndex) {
       }
     }
   } catch(e) {
+    vnHideStageLoading();
     const msg = (e.name === 'AbortError') ? '请求超时，请重试' : e.message;
     // 在选项覆盖层上显示错误与操作按钮（不再用 alert 阻塞）
     const errOverlay = document.getElementById('vnChoices');
     if (errOverlay) {
+      errOverlay.style.display = 'flex';
       // 仅当场景尚未开始渲染时才提供重试（后端失败会回滚状态，重试安全）
       const retryBtn = sceneRendered ? ''
         : `<button class="btn btn-primary" onclick="realtimeChooseInVN(${choiceIndex})">重试</button>`;

@@ -1,0 +1,25 @@
+main_plot:
+  summary: 独立调查员王尹君追查三年前旧案，线索却指向旧爱佟佳鑫的家族企业；两人在试探与隐瞒中反复交锋，直到幕后真正的操盘手浮出水面。
+  themes:
+  - 真相与保护
+  - 信任的代价
+  - 旧情与立场
+  core_conflict: 王尹君要揭开真相，而真相的另一端站着佟佳鑫——他既是她唯一的线索，也是她最不愿相信的嫌疑人。
+  stages:
+  - name: 雨夜旧货市场
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 灯下对账
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 名单的重量
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

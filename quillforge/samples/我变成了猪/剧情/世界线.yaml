@@ -1,0 +1,18 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 广告总监陈大志醉后变成一头猪，被远房表舅老周拉进自家猪圈，离出栏只剩七天。他必须让兽医周小满相信自己是人，同时面对猪圈里阿花的灵魂拷问。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 猪圈惊变
+  - scene_id: scene_02
+    sequence: 2
+    description: 对牛弹琴
+  - scene_id: scene_03
+    sequence: 3
+    description: 圈中旧事
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

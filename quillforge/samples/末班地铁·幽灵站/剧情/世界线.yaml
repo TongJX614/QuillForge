@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 暴雨夜，加班到深夜的林晚坐上末班地铁，列车驶入一座地图上不存在的老车站。她在站台遇见等待了十年的灵体女孩小满和沉默的老司机老周，被迫面对一封无法送达的信，也面对自己一直逃避的亲情遗憾。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 末班车·第十三站
+  - scene_id: scene_02
+    sequence: 2
+    description: 三分钟·站台
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

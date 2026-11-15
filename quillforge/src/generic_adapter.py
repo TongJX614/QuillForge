@@ -149,8 +149,8 @@ class GenericScriptAdapter:
 
         # 格式3: 嵌套在 main_plot / script 下
         for key in ("main_plot", "script", "story", "剧本"):
-            sub = data.get(key, {})
-            if isinstance(sub, dict):
+            sub = data.get(key)
+            if isinstance(sub, dict) and sub:
                 found = self._parse_characters(sub)
                 if found:
                     return found
@@ -281,8 +281,8 @@ class GenericScriptAdapter:
 
         # 格式4: 嵌套
         for key in ("main_plot", "script", "story"):
-            sub = data.get(key, {})
-            if isinstance(sub, dict):
+            sub = data.get(key)
+            if isinstance(sub, dict) and sub:
                 found = self._parse_worldline(sub)
                 if found:
                     return found
@@ -313,8 +313,8 @@ class GenericScriptAdapter:
 
         # 格式3: 嵌套
         for key in ("main_plot", "script", "story"):
-            sub = data.get(key, {})
-            if isinstance(sub, dict):
+            sub = data.get(key)
+            if isinstance(sub, dict) and sub:
                 found = self._parse_scenes(sub)
                 if found:
                     return found
@@ -412,8 +412,8 @@ class GenericScriptAdapter:
                     return s
         # 嵌套查找
         for key in ("main_plot", "script", "story"):
-            sub = data.get(key, {})
-            if isinstance(sub, dict):
+            sub = data.get(key)
+            if isinstance(sub, dict) and sub:
                 found = self._find_scene_data(scene_id, sub)
                 if found:
                     return found

@@ -1,0 +1,21 @@
+main_plot:
+  summary: 城市白领陈大雷回村散心，在养猪场借厕所时突然变成一头猪。他必须让老周和他闺女相信自己是人，同时躲过即将到来的出栏日。
+  themes:
+  - 身份认同
+  - 城乡差异
+  - 人与动物的共情
+  - 活着本身的荒诞与珍贵
+  core_conflict: 一头'人变的猪'想要证明自己是人，而养猪的人只想把他养肥卖掉。
+  stages:
+  - name: 一睁眼，我裂开了
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 称重台上的表演
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

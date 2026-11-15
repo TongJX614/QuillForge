@@ -1,0 +1,20 @@
+main_plot:
+  summary: 被逐的黑魔法学徒莉娜为赎清无意间释放的诅咒，在导师与灵体少女的帮助下直面黑魔法集会首领格雷姆，抉择是否以自身为代价终结一切。
+  themes:
+  - 救赎与代价
+  - 师徒信任
+  - 自我宽恕
+  core_conflict: 莉娜必须在自我牺牲与苟且偷生之间抉择，同时不被黑魔法侵蚀变成她最憎恨的那种人。
+  stages:
+  - name: 锁链下的低语
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 井边的长袍
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 花盆下的信
+  description: ''
+  options:
+  - id: choice_1
+    text: 当着父亲的面立刻拆开信封
+    leads_to_ending: null
+  - id: choice_2
+    text: 等父亲下楼后独自拆开
+    leads_to_ending: null
+  - id: choice_3
+    text: 追上父亲，把信递给他让他先看
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 信纸上的空白
+  description: ''
+  options:
+  - id: choice_1
+    text: 立刻下楼去翻米缸，确认存折是否还在
+    leads_to_ending: null
+  - id: choice_2
+    text: 追问陈屿那个人影的更多细节，比如衣着、动作
+    leads_to_ending: null
+  - id: choice_3
+    text: 把信收好，先回家试探父亲对“米缸”和“存折”的反应
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 米缸底下的存折
+  description: ''
+  options:
+  - id: choice_1
+    text: 追上去，把存折拍在父亲面前，逼他把话说完
+    leads_to_ending: null
+  - id: choice_2
+    text: 不再追问，第二天带着存折去银行查取款记录和去向
+    leads_to_ending: null
+  - id: choice_3
+    text: 给陈屿发消息，问他那晚有没有看到母亲手里拿着什么东西
+    leads_to_ending: null

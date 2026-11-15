@@ -1,0 +1,17 @@
+events:
+- id: event_01
+  name: 灯下对账
+  type: plot
+  description: 你把那张被潮气泡软的复印件推到吊灯正下方，指尖压住一角，让模糊的金额栏正对着他。灯光透过纸背，那些被
+  trigger_conditions: {}
+  location: 旧货市场老猫的铺子
+  time: 深夜
+  characters_involved:
+  - char_01
+  - char_02
+  - char_03
+  content: 你把那张被潮气泡软的复印件推到吊灯正下方，指尖压住一角，让模糊的金额栏正对着他。灯光透过纸背，那些被蹭花的数字显出深浅不一的灰。雨声在卷帘门外连成一片，铺子里静得能听见旧表壳里某根游丝偶然的轻响。佟佳
+  choices:
+  - text: 答应赴约，但要佟佳鑫先交出一份当年经手人的名单
+  - text: 不答应，转而让老猫连夜去查苏曼青的旧档案
+  rewards: ''

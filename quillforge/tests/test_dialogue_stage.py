@@ -124,13 +124,14 @@ class TestDialogueStageExecute:
             {"speaker": "苏然", "text": "开始吧", "emotion": "坚定"},
         ]
 
-        result = stage.execute(ctx, sut, inp, {}, "旁白内容")
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "旁白内容")
 
-        assert len(result) == 3
-        assert result[0].speaker == "苏然"
-        assert result[0].text == "你好"
-        assert result[1].speaker == "林晓"
-        assert result[2].speaker == "苏然"
+        assert len(dialogues) == 3
+        assert merged_choices == []
+        assert dialogues[0].speaker == "苏然"
+        assert dialogues[0].text == "你好"
+        assert dialogues[1].speaker == "林晓"
+        assert dialogues[2].speaker == "苏然"
 
     def test_execute_with_id_normalization(self):
         """通过角色 ID 归一化 speaker"""
@@ -144,11 +145,12 @@ class TestDialogueStageExecute:
             {"speaker": "lin_xiao", "text": "也是ID", "emotion": "开心"},
         ]
 
-        result = stage.execute(ctx, sut, inp, {}, "")
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "")
 
-        assert len(result) == 2
-        assert result[0].speaker == "苏然"
-        assert result[1].speaker == "林晓"
+        assert len(dialogues) == 2
+        assert dialogues[0].speaker == "苏然"
+        assert dialogues[1].speaker == "林晓"
+        assert merged_choices == []
 
     def test_execute_with_lowercase_normalization(self):
         """通过小写名归一化 speaker"""
@@ -162,8 +164,9 @@ class TestDialogueStageExecute:
             {"speaker": "林晓", "text": "也正常", "emotion": "开心"},
         ]
 
-        result = stage.execute(ctx, sut, inp, {}, "")
-        assert len(result) == 2
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "")
+        assert len(dialogues) == 2
+        assert merged_choices == []
 
     def test_execute_filter_invalid_speaker(self):
         """过滤非法 speaker"""
@@ -179,12 +182,13 @@ class TestDialogueStageExecute:
             {"speaker": "unknown", "text": "又一个非法", "emotion": ""},
         ]
 
-        result = stage.execute(ctx, sut, inp, {}, "")
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "")
 
         # 只保留合法 speaker
-        assert len(result) == 2
-        assert result[0].speaker == "苏然"
-        assert result[1].speaker == "林晓"
+        assert len(dialogues) == 2
+        assert dialogues[0].speaker == "苏然"
+        assert dialogues[1].speaker == "林晓"
+        assert merged_choices == []
 
     def test_execute_json_decode_error(self):
         """JSON 解析失败时返回空列表"""
@@ -196,8 +200,9 @@ class TestDialogueStageExecute:
         import json
         sut.call_json.side_effect = json.JSONDecodeError("test", "", 0)
 
-        result = stage.execute(ctx, sut, inp, {}, "")
-        assert result == []
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "")
+        assert dialogues == []
+        assert merged_choices == []
 
     def test_execute_non_list_response(self):
         """LLM 返回非列表类型"""
@@ -208,8 +213,9 @@ class TestDialogueStageExecute:
 
         sut.call_json.return_value = {"not": "a list"}
 
-        result = stage.execute(ctx, sut, inp, {}, "")
-        assert result == []
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "")
+        assert dialogues == []
+        assert merged_choices == []
 
     def test_execute_empty_response(self):
         """LLM 返回空列表"""
@@ -220,8 +226,9 @@ class TestDialogueStageExecute:
 
         sut.call_json.return_value = []
 
-        result = stage.execute(ctx, sut, inp, {}, "")
-        assert result == []
+        dialogues, merged_choices = stage.execute(ctx, sut, inp, {}, "")
+        assert dialogues == []
+        assert merged_choices == []
 
 
 # ═══════════════════════════════════════════════════════

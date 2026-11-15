@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 末班车·第十三站
+  description: ''
+  options:
+  - id: choice_1
+    text: 咬牙跨出车门，先问清楚小满到底怎么回事
+    leads_to_ending: null
+  - id: choice_2
+    text: 先回头逼问老周，这趟车到底什么规矩
+    leads_to_ending: null
+  - id: choice_3
+    text: 留在车上不动，隔着车门跟小满说话
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 三分钟·站台
+  description: ''
+  options:
+  - id: choice_1
+    text: 深吸一口气，对小满说“行，我帮你送”，把信收进包里
+    leads_to_ending: null
+  - id: choice_2
+    text: 先不答应，追问老周“坐过站”到底是什么意思，把规则问清楚
+    leads_to_ending: null
+  - id: choice_3
+    text: 低头拆开信封，先看看里面到底写了什么，再决定
+    leads_to_ending: null

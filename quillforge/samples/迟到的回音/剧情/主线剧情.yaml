@@ -1,0 +1,20 @@
+main_plot:
+  summary: 七十五岁的退休邮递员收到一封自己五十年前寄出的信，在邻居和女儿的帮助下，他循着信中的线索，找回了一段被遗忘的约定。
+  themes:
+  - 时光与遗憾
+  - 父女和解
+  - 平凡人的坚守
+  core_conflict: 陈守拙想兑现五十年前信中对初恋的承诺，却发现对方早已搬走，而女儿正催他卖掉老屋搬去城里。
+  stages:
+  - name: 一封迟到五十年的信
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 雨檐下的旧信
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

@@ -1,0 +1,18 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 白虎岭上白骨精三度化形骗唐僧，悟空三次挥棒除妖却被师父视为滥杀。信任崩塌之际，唐僧写下贬书赶走大徒弟，却不知下一难已无猴王可挡。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 白虎岭·画圈之疑
+  - scene_id: scene_02
+    sequence: 2
+    description: 白虎岭·篮外之变
+  - scene_id: scene_03
+    sequence: 3
+    description: 白虎岭·白布之下
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

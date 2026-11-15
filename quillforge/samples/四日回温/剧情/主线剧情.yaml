@@ -1,0 +1,25 @@
+main_plot:
+  summary: 气象分析师林见夏重生回极寒前四天，她必须在无人相信的情况下说服超市店长、主播和保安队长，用有限时间囤积物资、通知社区，与时间赛跑。
+  themes:
+  - 信任的代价
+  - 普通人如何面对不可抗力
+  - 第二次机会的意义
+  core_conflict: 林见夏掌握真相却无人相信，她必须在四天内打破所有人的怀疑与冷漠，同时面对自己上一世失败的心理阴影。
+  stages:
+  - name: 周一清晨·倒计时开始
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 周一上午·超市冷柜前
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 周一上午·风铃与镜头
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

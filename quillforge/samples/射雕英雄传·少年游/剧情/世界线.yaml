@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 郭靖南下赴嘉兴之约，偶遇扮作乞丐的黄蓉，两人结伴闯荡江湖，卷入杨康身世之谜与金国阴谋，在黄药师阻挠下坚守真情。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 张家口·一碗面
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

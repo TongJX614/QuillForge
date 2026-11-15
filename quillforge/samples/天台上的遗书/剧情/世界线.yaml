@@ -1,0 +1,18 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 18岁少女在天台杂物堆里发现母亲三年前的遗书，与目击者少年和沉默父亲一起，拼出母亲隐瞒重病与债务、选择独自赴死的真相。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 花盆下的信
+  - scene_id: scene_02
+    sequence: 2
+    description: 信纸上的空白
+  - scene_id: scene_03
+    sequence: 3
+    description: 米缸底下的存折
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

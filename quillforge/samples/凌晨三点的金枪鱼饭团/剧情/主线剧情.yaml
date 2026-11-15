@@ -1,0 +1,20 @@
+main_plot:
+  summary: 失眠的夜班店员林默发现女孩苏晚每天凌晨三点零七分准时来买同一款饭团，他开始记录她的规律，逐渐揭开她等待的真相，也直面自己的失眠根源。
+  themes:
+  - 孤独与陪伴
+  - 等待与释怀
+  - 日常中的奇迹
+  core_conflict: 林默想打破规则追问苏晚的秘密，而苏晚用礼貌的沉默守护着不愿触碰的过去。
+  stages:
+  - name: 雨夜便利店
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 三点零七分的准时
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

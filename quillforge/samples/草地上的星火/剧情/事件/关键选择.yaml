@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 草地黄昏
+  description: ''
+  options:
+  - id: choice_1
+    text: 让英子留下照看药包，自己带老葛连夜摸向前卫营方向
+    leads_to_ending: null
+  - id: choice_2
+    text: 三人同行，老葛背锅殿后，英子居中，自己在前探路
+    leads_to_ending: null
+  - id: choice_3
+    text: 先不急着走，等雨头过去，再仔细核对一遍路线符号
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 泥沼夜行
+  description: ''
+  options:
+  - id: choice_1
+    text: 往左绕行，多走半个时辰也要避开急流
+    leads_to_ending: null
+  - id: choice_2
+    text: 就地找浅处蹚过去，抢时间
+    leads_to_ending: null
+  - id: choice_3
+    text: 先派一人探水，其余两人原地等信号
+    leads_to_ending: null

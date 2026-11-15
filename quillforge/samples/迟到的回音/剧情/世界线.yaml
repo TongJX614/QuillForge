@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 七十五岁的退休邮递员收到一封自己五十年前寄出的信，在邻居和女儿的帮助下，他循着信中的线索，找回了一段被遗忘的约定。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 一封迟到五十年的信
+  - scene_id: scene_02
+    sequence: 2
+    description: 雨檐下的旧信
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 憨厚少年郭靖南下赴约，途中结识机灵少女黄蓉，卷入宋金之争。面对义弟杨康的背叛与丐帮洪七公的考验，他必须在笨拙与坚持中找到自己的侠道。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 张家口酒楼初相逢
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

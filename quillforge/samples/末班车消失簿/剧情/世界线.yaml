@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 夜班护士黎晚在末班车上目睹乘客接连消失，她联合退休调度员老周、沉默少年阿澈和热心摊主芳姨，从遗留物和速写本里拼出消失规律，在终点站前阻止最后一人消失。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 空座上的外套
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

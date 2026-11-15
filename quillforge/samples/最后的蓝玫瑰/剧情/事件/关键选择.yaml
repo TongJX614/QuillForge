@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 意外的蓝色
+  description: ''
+  options:
+  - id: choice_1
+    text: 让老周去拖住陈监，自己和小满立刻取样分析
+    leads_to_ending: null
+  - id: choice_2
+    text: 先把蓝玫瑰整株移到母亲留下的旧培养箱里，再作打算
+    leads_to_ending: null
+  - id: choice_3
+    text: 主动向陈监报告，但隐瞒与母亲种子的关联
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 取样与倒计时
+  description: ''
+  options:
+  - id: choice_1
+    text: 让测序继续跑完，亲自去门口支援老周，用植物学数据争取正式登记流程
+    leads_to_ending: null
+  - id: choice_2
+    text: 先让测序跑完，同时让小满把蓝玫瑰暂时移入废弃培养槽伪装成已清理
+    leads_to_ending: null
+  - id: choice_3
+    text: 中断测序，只取关键序列片段，立刻去找母亲当年的温室日志
+    leads_to_ending: null

@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 末班车启程
+  description: ''
+  options:
+  - id: choice_1
+    text: 继续追问老陈五年前的事
+    leads_to_ending: null
+  - id: choice_2
+    text: 回到座位，暗中观察车厢和剩余乘客
+    leads_to_ending: null
+  - id: choice_3
+    text: 安抚小雅，和她交换信息
+    leads_to_ending: null

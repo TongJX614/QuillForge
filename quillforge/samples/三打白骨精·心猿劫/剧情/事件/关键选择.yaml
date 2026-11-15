@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 白虎岭·画圈之疑
+  description: ''
+  options:
+  - id: choice_1
+    text: 喝止八戒，坚持不出圈，等悟空回来再说
+    leads_to_ending: null
+  - id: choice_2
+    text: 劝师父先接下馒头，但让村妇把篮子放在圈外
+    leads_to_ending: null
+  - id: choice_3
+    text: 不动声色，暗中留意这村妇的言行破绽
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 白虎岭·篮外之变
+  description: ''
+  options:
+  - id: choice_1
+    text: 不再多言，抢在师父念咒前，一棒打向那竹篮，先破了她的障眼法
+    leads_to_ending: null
+  - id: choice_2
+    text: 强压怒火，退到一旁，请师父自己掀开白布验看篮中之物
+    leads_to_ending: null
+  - id: choice_3
+    text: 一把拽过八戒挡在师父身前，低声告诫他莫要再帮腔，暗中提防村妇暴起
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 白虎岭·白布之下
+  description: ''
+  options:
+  - id: choice_1
+    text: 不再争辩，暗中拔一根毫毛变作小虫，悄悄附在村妇身上跟住她，看她往何处去
+    leads_to_ending: null
+  - id: choice_2
+    text: 拦住村妇去路，当着师父的面请她把手腕伸出来——那截白得发青的手腕便是破绽
+    leads_to_ending: null
+  - id: choice_3
+    text: 咬牙退开，让师父放她走，却暗暗握紧金箍棒，等她走出圈子再动手
+    leads_to_ending: null

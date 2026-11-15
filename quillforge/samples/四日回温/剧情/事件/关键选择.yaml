@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 周一清晨·倒计时开始
+  description: ''
+  options:
+  - id: choice_1
+    text: 直接去超市找陈默，用报告数据说服他。
+    leads_to_ending: null
+  - id: choice_2
+    text: 先绕到小区保安室，试探老秦的态度。
+    leads_to_ending: null
+  - id: choice_3
+    text: 给周雪发消息，约她见面聊“大新闻”。
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 周一上午·超市冷柜前
+  description: ''
+  options:
+  - id: choice_1
+    text: 立刻冲出去拦住周雪，绝不能让她在直播里乱说。
+    leads_to_ending: null
+  - id: choice_2
+    text: 让陈默出面去拦，自己在店里继续理清物资清单。
+    leads_to_ending: null
+  - id: choice_3
+    text: 干脆把周雪拉进来，让她用直播做“预警”，赌一把舆论。
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 周一上午·风铃与镜头
+  description: ''
+  options:
+  - id: choice_1
+    text: 让周雪立刻开拍，把陈默备货的画面发出去，先抢在谣言前面占领说法。
+    leads_to_ending: null
+  - id: choice_2
+    text: 拦住周雪，先去小区找老秦，用清单和报告争取保安放行布告栏。
+    leads_to_ending: null
+  - id: choice_3
+    text: 留在店里，和陈默一起把订货量再核一遍，确保数字不出错。
+    leads_to_ending: null

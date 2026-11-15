@@ -12,6 +12,7 @@
 """
 
 import copy
+import json
 import threading
 import time
 from unittest.mock import patch, MagicMock
@@ -209,6 +210,71 @@ class TestGetState:
 
 
 # ═══════════════════════════════════════════════════════
+# 8. 角色/背景字段写完即触发生图
+# ═══════════════════════════════════════════════════════
+
+class TestEarlyAssetGeneration:
+    """测试 8: 流式生成期间提前提交生图任务"""
+
+    def test_extract_complete_array_waits_for_closing_bracket(self):
+        session = RealtimeStorySession("测试")
+        buf = '{"title": "T", "characters": [{"name": "A"'
+        assert session._extract_complete_array(buf, "characters") is None
+
+        buf += '}, {"name": "B"}]'
+        assert session._extract_complete_array(buf, "characters") == [
+            {"name": "A"}, {"name": "B"},
+        ]
+        session.close()
+
+    def test_submit_chars_from_seed_submits_each_once(self):
+        session = RealtimeStorySession("测试")
+        image_gen = MagicMock()
+        image_gen.enabled = True
+        submitted = []
+        session._bg_executor = MagicMock()
+        session._bg_executor.submit.side_effect = lambda fn, *args: submitted.append(args)
+
+        seed = (
+            '{"title": "测试剧本", "characters": ['
+            '{"id": "char_01", "name": "甲", "appearance": "黑袍"},'
+            '{"id": "char_02", "name": "乙", "appearance": "白衣"}]}'
+        )
+        session._submit_chars_from_seed(seed, image_gen)
+        session._submit_chars_from_seed(seed, image_gen)
+
+        assert len(submitted) == 2
+        assert submitted[0][1:3] == ("char", "char_01")
+        assert submitted[1][1:3] == ("char", "char_02")
+        session.close()
+
+    def test_scene_stream_emits_bg_prompt_before_scene_end(self):
+        session = RealtimeStorySession("测试")
+        session.seed = {"characters": []}
+        chunks = [
+            '{"scene_name": "测试场景", "location": "地点", "time": "夜", ',
+            '"atmosphere": "阴冷", "image_description": "废弃图书馆，月光',
+            '透过破窗", "narration": "你推开门。", "dialogues": [], ',
+            '"choices": [{"id": "c1", "text": "进入"}], '
+            '"characters_present": [], "is_ending": false}',
+        ]
+        fake_client = MagicMock()
+        fake_client.generate_stream.return_value = iter(chunks)
+        session._client = fake_client
+
+        events = list(session._generate_scene_stream(0))
+        types = [e["type"] for e in events]
+
+        assert "bg_prompt" in types and "scene_end" in types
+        assert types.index("bg_prompt") < types.index("scene_end")
+        bg = events[types.index("bg_prompt")]
+        assert bg["scene_id"] == "scene_01"
+        assert bg["atmosphere"] == "阴冷"
+        assert bg["image_description"] == "废弃图书馆，月光透过破窗"
+        session.close()
+
+
+# ═══════════════════════════════════════════════════════
 # 辅助工具
 # ═══════════════════════════════════════════════════════
 
@@ -261,12 +327,12 @@ class TestDeepCopyRaceWindow:
     """
 
     def test_deepcopy_race_window_detects_mutation(self):
-        """验证 deepcopy 无锁窗口期间的竞态可被检测到。
+        """验证快照在并发追加下的隔离性。
 
-        通过 monkeypatch deepcopy 插入同步屏障，在 deepcopy 执行期间
-        从另一个线程修改 self.scenes。由于 deepcopy 不在锁内执行，
-        慢速 deepcopy 窗口期间主线程的修改会泄漏到快照中——
-        这正是无锁窗口的风险所在。
+        通过 monkeypatch deepcopy 插入同步屏障，在快照末尾场景的 deepcopy
+        执行期间从另一个线程向 self.scenes 追加新场景。
+        快照的列表拷贝（list(self.scenes)）是原子操作，先于末尾场景的
+        deepcopy 完成，因此并发追加不会泄漏到快照——快照保持一致。
         """
         session = _make_session_with_scenes(2)
         session.history = [{"scene_index": 0, "choice_index": 0, "choice_text": "A"}]
@@ -275,14 +341,14 @@ class TestDeepCopyRaceWindow:
         barrier = threading.Event()
 
         def slow_deepcopy(obj):
-            # 第一次 deepcopy（self.scenes）时暂停，让主线程修改 scenes
-            if isinstance(obj, list) and len(obj) == 2 and not barrier.is_set():
+            # 快照末尾场景（唯一仍可能被主线程写入的场景）的 deepcopy 时暂停
+            if isinstance(obj, dict) and obj.get("scene_name") == "场景2" and not barrier.is_set():
                 barrier.set()
                 time.sleep(0.05)  # 模拟 deepcopy 耗时窗口
             return original_deepcopy(obj)
 
         def mutate_scenes():
-            # 等待 deepcopy 开始执行后再追加新场景
+            # 等待末尾场景 deepcopy 开始执行后再追加新场景
             barrier.wait(timeout=2.0)
             session.scenes.append({
                 "scene_name": "场景3_突变",
@@ -304,21 +370,24 @@ class TestDeepCopyRaceWindow:
                 mutator.start()
                 session._start_pre_generation(1)
                 mutator.join(timeout=5.0)
+            # 必须在 patch 生效期间排空线程池：worker 可能在 patch 退出后才取到任务，
+            # 届时 self._generate_scene 回落到真实现，单测会打出真实 LLM 请求
+            session._pre_gen_executor.shutdown(wait=True)
 
-        session._pre_gen_executor.shutdown(wait=True)
-
-        # 验证：竞态窗口导致快照包含了突变数据（3 个场景而非 2 个）
-        # 这证明 deepcopy 在无锁窗口期间读取到了不一致的状态
+        # 验证：列表快照在末尾场景 deepcopy 窗口前已原子完成，
+        # 并发追加不泄漏进快照，快照长度与内容保持一致
         assert mock_gen.called, "_generate_scene 应该被调用"
         call_args = mock_gen.call_args
         scenes_snap = call_args.kwargs.get('scenes_snapshot') or (
             call_args[1].get('scenes_snapshot') if len(call_args) > 1 else None
         )
         assert scenes_snap is not None, "应该传入 scenes_snapshot"
-        assert len(scenes_snap) == 3, (
-            f"无锁窗口应允许突变泄漏（期望 3 个场景），实际 {len(scenes_snap)}。"
-            "如果快照只有 2 个场景，说明竞态窗口未被正确暴露"
+        assert len(scenes_snap) == 2, (
+            f"快照应保持一致（期望 2 个场景），实际 {len(scenes_snap)}。"
+            "并发追加不应泄漏进快照"
         )
+        assert all(s.get("scene_name") != "场景3_突变" for s in scenes_snap)
+        assert scenes_snap is not session.scenes, "快照应与原列表隔离"
 
         session.close()
 
@@ -677,8 +746,8 @@ class TestPreGenLockScope:
         with patch.object(session, '_generate_scene', mock_gen):
             with patch('realtime_engine.copy.deepcopy', side_effect=tracked_deepcopy):
                 session._start_pre_generation(0)
-
-        session._pre_gen_executor.shutdown(wait=True)
+            # 同上：worker 必须在 patch 生效期间排空，否则会发起真实 LLM 请求
+            session._pre_gen_executor.shutdown(wait=True)
 
         # deepcopy 应该在 lock_acquire 之前执行
         assert len(call_order) >= 2, f"应至少有 2 个操作记录，实际: {call_order}"
@@ -687,4 +756,150 @@ class TestPreGenLockScope:
         assert "lock_acquire" in call_order, \
             f"应该有锁获取操作，实际顺序: {call_order}"
 
+        session.close()
+
+
+# ═══════════════════════════════════════════════════════
+# 8. L1 质量硬门 + 失败原因反馈注入
+# ═══════════════════════════════════════════════════════
+
+def _dlg(speaker="主角", text="台词内容", emotion="平静", sid="char_01"):
+    return {"speaker_id": sid, "speaker": speaker, "text": text, "emotion": emotion}
+
+
+def _scene_with(n_dialogues=10, **overrides) -> dict:
+    scene = {
+        "scene_name": "测试场景",
+        "narration": "你推开教室的门，烛光在潮湿的空气里摇曳。",
+        "dialogues": [_dlg() for _ in range(n_dialogues)],
+        "choices": [{"id": "c1", "text": "继续"}],
+        "is_ending": False,
+    }
+    scene.update(overrides)
+    return scene
+
+
+class TestQualityGate:
+    """_check_scene_quality / _apply_quality_gate / 反馈注入"""
+
+    def test_clean_scene_passes(self):
+        session = _make_session_with_scenes(0)
+        scene = session._postprocess_scene(_scene_with(), 0)
+        assert session._check_scene_quality(scene) == []
+
+    def test_detects_unknown_speaker_and_gaps(self):
+        session = _make_session_with_scenes(0)
+        scene = session._postprocess_scene(
+            _scene_with(
+                n_dialogues=4,
+                narration="太短",
+                choices=[],
+                dialogues=[_dlg(speaker="幽灵王", sid="char_99")
+                           for _ in range(4)],
+            ),
+            0,
+        )
+        issues = session._check_scene_quality(scene)
+        assert any("幽灵王" in i for i in issues)
+        assert any("少于下限" in i for i in issues)
+        assert any("旁白" in i for i in issues)
+
+    def test_emotion_alias_normalized_not_retried(self):
+        """情绪是展示标签：近义词收敛到标准枚举，但不因此多花一次 LLM 调用"""
+        session = _make_session_with_scenes(0)
+        emotions = ("冷静", "焦急", "calm", "狂喜") * 2
+        scene = session._postprocess_scene(
+            _scene_with(dialogues=[_dlg(emotion=e) for e in emotions]),
+            0,
+        )
+        assert [d["emotion"] for d in scene["dialogues"]] == [
+            "沉着", "急切", "平静", "狂喜",
+        ] * 2
+        assert session._check_scene_quality(scene) == []
+
+    def test_alias_speaker_normalized_before_gate(self):
+        """L2 归一化在硬门之前：别名/大小写不算幻觉角色"""
+        session = _make_session_with_scenes(0)
+        scene = session._postprocess_scene(
+            _scene_with(dialogues=[_dlg(speaker="主角", sid="char_01", text="数据概率")
+                                   for _ in range(10)]),
+            0,
+        )
+        assert scene["dialogues"][0]["speaker"] == "主角"
+        assert session._check_scene_quality(scene) == []
+
+    def test_choices_backfilled_by_postprocess_so_gate_stays_silent(self):
+        """缺选项由 _postprocess_scene 兜底，硬门不再为此重复消耗一次重试"""
+        session = _make_session_with_scenes(0)
+        scene = session._postprocess_scene(_scene_with(choices=[]), 0)
+        assert len(scene["choices"]) >= 1
+        assert session._check_scene_quality(scene) == []
+
+        ending = session._postprocess_scene(
+            _scene_with(is_ending=True, ending_type="good", choices=[]), 0
+        )
+        assert ending["choices"] == []
+        assert session._check_scene_quality(ending) == []
+
+    def test_gate_records_quality_and_feedback(self):
+        session = _make_session_with_scenes(0)
+        scene = session._postprocess_scene(_scene_with(n_dialogues=2), 0)
+        issues = session._apply_quality_gate(scene, 0)
+        assert scene["quality"]["passed"] is False
+        assert scene["quality"]["issues"] == issues
+        assert "上一场景的质量问题" in session._quality_feedback
+
+    def test_feedback_injected_into_next_prompt(self):
+        session = _make_session_with_scenes(1)
+        session._quality_feedback = "【上一场景的质量问题，本次必须避免】\n- 非法说话人「幽灵王」"
+        prompt = session._build_scene_prompt(1, "继续调查",
+                                            quality_feedback=session._quality_feedback)
+        assert "非法说话人「幽灵王」" in prompt
+
+    def test_clean_scene_clears_feedback(self):
+        session = _make_session_with_scenes(0)
+        session._quality_feedback = "残留反馈"
+        session._apply_quality_gate(session._postprocess_scene(_scene_with(), 0), 0)
+        assert session._quality_feedback == ""
+
+    def test_pre_gen_retries_once_with_feedback(self):
+        """预生成路径未推送给玩家：硬门未通过时带原因重试，取问题更少的结果"""
+        session = _make_session_with_scenes(0)
+        bad = _scene_with(n_dialogues=2, narration="太短")
+        good = _scene_with()
+        client = MagicMock()
+        client.generate.side_effect = [json.dumps(bad), json.dumps(good)]
+        session._client = client
+
+        scene = session._generate_scene(1, "继续调查")
+
+        assert client.generate.call_count == 2
+        retry_prompt = client.generate.call_args_list[1].args[1]
+        assert "上次生成未达标" in retry_prompt
+        assert scene["quality"]["passed"] is True
+        session.close()
+
+    def test_pre_gen_keeps_original_when_retry_not_better(self):
+        session = _make_session_with_scenes(0)
+        bad = _scene_with(n_dialogues=2)
+        client = MagicMock()
+        client.generate.side_effect = [json.dumps(bad), json.dumps(bad)]
+        session._client = client
+
+        scene = session._generate_scene(1, "继续调查")
+
+        assert client.generate.call_count == 2
+        assert scene["quality"]["passed"] is False
+        session.close()
+
+    def test_scene_end_event_carries_quality(self):
+        session = _make_session_with_scenes(0)
+        chunks = [json.dumps(_scene_with(n_dialogues=2))]
+        client = MagicMock()
+        client.generate_stream.return_value = iter(chunks)
+        session._client = client
+
+        events = list(session._generate_scene_stream(0))
+        scene_end = next(e for e in events if e["type"] == "scene_end")
+        assert scene_end["quality"]["passed"] is False
         session.close()

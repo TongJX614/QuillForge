@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 凌晨三点，加班后的林晚走进便利店，发现店员长着自己的脸。镜中人温柔地留她“多待一会儿”，而老周的出现让林晚意识到，天亮之前她必须做出选择：留下，还是回去。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 三点零七分的风铃
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

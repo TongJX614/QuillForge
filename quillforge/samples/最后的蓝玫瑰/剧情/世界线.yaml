@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 火星温室里长出一朵地球已灭绝的蓝玫瑰，植物学家林昭必须在资源主任销毁它之前，查清它的来历，并决定是否赌上一切保护这个奇迹。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 意外的蓝色
+  - scene_id: scene_02
+    sequence: 2
+    description: 取样与倒计时
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

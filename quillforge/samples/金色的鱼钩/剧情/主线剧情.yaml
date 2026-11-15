@@ -1,0 +1,15 @@
+main_plot:
+  summary: 过草地时，老班长用缝衣针弯成鱼钩钓鱼，熬汤给三个病号，自己却偷偷嚼草根。小梁发现真相，老班长最终牺牲，鱼钩成为精神信物。
+  themes:
+  - 牺牲与奉献
+  - 信仰的力量
+  - 战友情谊
+  core_conflict: 老班长竭力隐瞒自己饿肚子的事实，而小战士们拼命想弄清真相并分担责任。
+  stages:
+  - name: 鱼汤疑云
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

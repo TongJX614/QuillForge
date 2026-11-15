@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 雨夜初语
+  description: ''
+  options:
+  - id: choice_1
+    text: 先听听墨言说的第一页线索，再决定从哪儿下手。
+    leads_to_ending: null
+  - id: choice_2
+    text: 直接走向那多出来的第七排书架。
+    leads_to_ending: null
+  - id: choice_3
+    text: 先问灰伯，这图书馆里到底还有多少“不寻常”的东西。
+    leads_to_ending: null

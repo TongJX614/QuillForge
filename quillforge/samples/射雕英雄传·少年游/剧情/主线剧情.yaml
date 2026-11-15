@@ -1,0 +1,15 @@
+main_plot:
+  summary: 郭靖南下赴嘉兴之约，偶遇扮作乞丐的黄蓉，两人结伴闯荡江湖，卷入杨康身世之谜与金国阴谋，在黄药师阻挠下坚守真情。
+  themes:
+  - 侠义与担当
+  - 真情与门第
+  - 身世与选择
+  core_conflict: 郭靖的忠厚信义与杨康的贪慕富贵形成对立，同时黄药师的门第之见考验着郭靖与黄蓉的感情。
+  stages:
+  - name: 张家口·一碗面
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

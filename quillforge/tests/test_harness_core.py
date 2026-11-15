@@ -316,13 +316,8 @@ class TestHarnessRun:
 
         # 设置 stage mock 返回值
         stages["narrative"].execute.return_value = "测试旁白内容文本"
-        stages["dialogue"].execute.return_value = make_dialogues(4)
-        # validation stage 不直接在 run 中被调用 execute，而是每次都新建 NarrativeValidator
-        # NarrativeValidator 在 run 内部创建，mock 它的 validate_all
-
-        # Mock NarrativeValidator
-        mock_validator_instance = MagicMock()
-        mock_validator_instance.validate_all.return_value = make_validation_result(passed=True)
+        stages["dialogue"].execute.return_value = (make_dialogues(4), [])
+        stages["validation"].execute.return_value = make_validation_result(passed=True)
 
         observer = make_mock_observer()
 
@@ -334,8 +329,7 @@ class TestHarnessRun:
             observers=[observer],
         )
 
-        with patch("quillforge.core.NarrativeValidator", return_value=mock_validator_instance):
-            result = harness.run(make_harness_input())
+        result = harness.run(make_harness_input())
 
         assert result["success"] is True
         assert "data" in result
@@ -354,15 +348,13 @@ class TestHarnessRun:
         stages = make_mock_stages()
 
         stages["narrative"].execute.return_value = "测试旁白内容文本"
-        stages["dialogue"].execute.return_value = make_dialogues(4)
+        stages["dialogue"].execute.return_value = (make_dialogues(4), [])
         stages["choices"].execute.return_value = make_choices(2)
 
         # 第一次验证失败，第二次成功
         fail_result = make_validation_result(passed=False)
         pass_result = make_validation_result(passed=True)
-
-        mock_validator = MagicMock()
-        mock_validator.validate_all.side_effect = [fail_result, pass_result]
+        stages["validation"].execute.side_effect = [fail_result, pass_result]
 
         harness = Harness(
             config=make_test_config(),
@@ -371,12 +363,11 @@ class TestHarnessRun:
             fallback=make_mock_fallback(),
         )
 
-        with patch("quillforge.core.NarrativeValidator", return_value=mock_validator):
-            result = harness.run(make_harness_input())
+        result = harness.run(make_harness_input())
 
         assert result["success"] is True
-        # validate_all 被调用了 2 次（第一次失败，第二次重试成功）
-        assert mock_validator.validate_all.call_count == 2
+        # validation stage 被调用了 2 次（第一次失败，第二次重试成功）
+        assert stages["validation"].execute.call_count == 2
 
     def test_run_with_fallback(self):
         """对话不足时触发 Fallback"""
@@ -385,8 +376,9 @@ class TestHarnessRun:
 
         stages["narrative"].execute.return_value = "测试旁白内容文本"
         # 只生成 1 轮对话，不足 min_dialogues=3
-        stages["dialogue"].execute.return_value = make_dialogues(1)
+        stages["dialogue"].execute.return_value = (make_dialogues(1), [])
         stages["choices"].execute.return_value = make_choices(2)
+        stages["validation"].execute.return_value = make_validation_result(passed=True)
 
         mock_validator = MagicMock()
         mock_validator.validate_all.return_value = make_validation_result(passed=True)
@@ -413,13 +405,11 @@ class TestHarnessRun:
         stages = make_mock_stages()
 
         stages["narrative"].execute.return_value = "测试旁白内容文本"
-        stages["dialogue"].execute.return_value = make_dialogues(4)
+        stages["dialogue"].execute.return_value = (make_dialogues(4), [])
         stages["choices"].execute.return_value = make_choices(2)
 
         # 所有重试都失败
-        fail_result = make_validation_result(passed=False)
-        mock_validator = MagicMock()
-        mock_validator.validate_all.return_value = fail_result
+        stages["validation"].execute.return_value = make_validation_result(passed=False)
 
         harness = Harness(
             config=make_test_config(),
@@ -428,9 +418,8 @@ class TestHarnessRun:
             fallback=make_mock_fallback(),
         )
 
-        with patch("quillforge.core.NarrativeValidator", return_value=mock_validator):
-            # 即使验证全失败，fallback 可能也会补充对话
-            result = harness.run(make_harness_input())
+        # 即使验证全失败，fallback 可能也会补充对话
+        result = harness.run(make_harness_input())
 
         # 输出仍会生成（即使验证失败）
         assert "data" in result
@@ -530,9 +519,7 @@ class TestRunStream:
             {"kind": "dialogue", "dialogue": Dialogue(speaker="角色A", text="开始吧", emotion="坚定")},
         ])
         stages["choices"].execute.return_value = make_choices(2)
-
-        mock_validator = MagicMock()
-        mock_validator.validate_all.return_value = make_validation_result(passed=True)
+        stages["validation"].execute.return_value = make_validation_result(passed=True)
 
         harness = Harness(
             config=make_test_config(),
@@ -541,8 +528,7 @@ class TestRunStream:
             fallback=make_mock_fallback(),
         )
 
-        with patch("quillforge.core.NarrativeValidator", return_value=mock_validator):
-            events = list(harness.run_stream(make_harness_input()))
+        events = list(harness.run_stream(make_harness_input()))
 
         # 应包含 stage 事件、narration 事件、dialogue 事件、choices 事件、done 事件
         event_types = [e["event"] for e in events]
@@ -560,9 +546,7 @@ class TestRunStream:
         stages["narrative"].execute_stream.return_value = iter([])
         stages["dialogue"].execute_stream.return_value = iter([])
         stages["choices"].execute.return_value = make_choices(2)
-
-        mock_validator = MagicMock()
-        mock_validator.validate_all.return_value = make_validation_result(passed=True)
+        stages["validation"].execute.return_value = make_validation_result(passed=True)
 
         harness = Harness(
             config=make_test_config(),
@@ -571,8 +555,7 @@ class TestRunStream:
             fallback=make_mock_fallback(),
         )
 
-        with patch("quillforge.core.NarrativeValidator", return_value=mock_validator):
-            events = list(harness.run_stream(make_harness_input()))
+        events = list(harness.run_stream(make_harness_input()))
 
         done_event = events[-1]
         assert done_event["event"] == "done"

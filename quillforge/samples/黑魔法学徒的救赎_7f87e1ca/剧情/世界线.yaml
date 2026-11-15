@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 被逐的黑魔法学徒莉娜为赎清无意间释放的诅咒，在导师与灵体少女的帮助下直面黑魔法集会首领格雷姆，抉择是否以自身为代价终结一切。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 锁链下的低语
+  - scene_id: scene_02
+    sequence: 2
+    description: 井边的长袍
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

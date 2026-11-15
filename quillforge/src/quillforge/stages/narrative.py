@@ -34,10 +34,12 @@ class NarrativeStage(StageBase):
         sut: NarrativeSUT,
         input_data: HarnessInput,
         extra: dict,
+        feedback: str = "",
     ) -> str:
         """非流式生成旁白"""
-        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, sut)
-        narration = sut.call(ctx.rendered_system_prompt, user_prompt)
+        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, sut, feedback=feedback)
+        narration = sut.call(ctx.rendered_system_prompt, user_prompt,
+                             model=input_data.options.model or "")
         return self._clean_narration(narration)
 
     def execute_stream(
@@ -46,11 +48,13 @@ class NarrativeStage(StageBase):
         sut: NarrativeSUT,
         input_data: HarnessInput,
         extra: dict,
+        feedback: str = "",
     ) -> Generator[dict, None, str]:
         """流式生成旁白，逐块 yield 增量文本"""
-        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, sut)
+        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, sut, feedback=feedback)
         narration = ""
-        for delta in sut.call_stream(ctx.rendered_system_prompt, user_prompt):
+        for delta in sut.call_stream(ctx.rendered_system_prompt, user_prompt,
+                                     model=input_data.options.model or ""):
             narration += delta
             yield {"event": "narration_delta", "delta": delta}
         narration = self._clean_narration(narration)
@@ -63,6 +67,7 @@ class NarrativeStage(StageBase):
         inp: HarnessInput,
         extra: dict,
         sut: NarrativeSUT,
+        feedback: str = "",
     ) -> str:
         """构建旁白生成的 user prompt"""
         variables = self._common_variables(extra)
@@ -79,6 +84,7 @@ class NarrativeStage(StageBase):
             "characters": assembled.active_characters,
             "playerDecision": assembled.player_decision,
             "previousNarration": inp.previous_context.narration if inp.previous_context else "",
+            "retryFeedback": feedback,
         })
         return sut.render_template(sut.prompts["narration"], variables)
 

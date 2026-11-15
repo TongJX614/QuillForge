@@ -1,0 +1,15 @@
+main_plot:
+  summary: 记者周晚为查姐姐失踪真相登上7路末班车，乘客接连无声消失，她必须在第七站前找出规律，决定带谁下车。
+  themes:
+  - 执念与放手
+  - 旁观者的责任
+  - 记忆与遗忘
+  core_conflict: 周晚想揭开真相带人下车，但每多救一个人，就必须有人留在第七站替代。
+  stages:
+  - name: 第七站之前
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

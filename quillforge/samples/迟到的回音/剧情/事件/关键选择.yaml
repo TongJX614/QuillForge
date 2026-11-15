@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 一封迟到五十年的信
+  description: ''
+  options:
+  - id: choice_1
+    text: 让林若溪把信的内容念出来，自己坐在竹凳上慢慢听
+    leads_to_ending: null
+  - id: choice_2
+    text: 先问老周记不记得当年这封信的来龙去脉
+    leads_to_ending: null
+  - id: choice_3
+    text: 把信先收起来，说等雨停了再讲，转身进屋
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 雨檐下的旧信
+  description: ''
+  options:
+  - id: choice_1
+    text: 让林若溪去查老邮所的旧档案，看这封信到底卡在哪一环
+    leads_to_ending: null
+  - id: choice_2
+    text: 先打听秀兰的下落，信的事以后再说
+    leads_to_ending: null
+  - id: choice_3
+    text: 把信收起来，这事到此为止，不想再翻旧账
+    leads_to_ending: null

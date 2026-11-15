@@ -1,0 +1,15 @@
+main_plot:
+  summary: 林落深夜收到匿名邮件，得知导师十年前的造假案另有隐情。她联合记者姜小满，找到隐姓埋名的数据员陈默，逐步逼近副校长周维安的真相。
+  themes:
+  - 学术良知
+  - 勇气与赎罪
+  - 权力与真相
+  core_conflict: 林落要揭开真相，而周维安用权力和威胁步步封堵，线人陈默又在恐惧中反复退缩。
+  stages:
+  - name: 匿名邮件
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

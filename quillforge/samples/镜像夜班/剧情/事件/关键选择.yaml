@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 三点零七分的风铃
+  description: ''
+  options:
+  - id: choice_1
+    text: 拿起那个蓝色杯子，问她三年前的日记写了什么
+    leads_to_ending: null
+  - id: choice_2
+    text: 后退一步，说“我要走了”，转身去推玻璃门
+    leads_to_ending: null
+  - id: choice_3
+    text: 假装镇定，走到货架前拿起一盒酸奶，说“我买完就走”
+    leads_to_ending: null

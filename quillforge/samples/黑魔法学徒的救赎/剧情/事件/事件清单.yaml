@@ -1,0 +1,16 @@
+events:
+- id: event_01
+  name: 壁炉余烬
+  type: plot
+  description: 艾莉丝的办公室在城堡西塔的拐角，比地下教室干燥得多，却同样幽暗。壁炉里的火苗压得很低，橘光只够照亮书
+  trigger_conditions: {}
+  location: 艾莉丝·克罗夫特的办公室
+  time: 傍晚
+  characters_involved:
+  - char_01
+  - char_02
+  content: 艾莉丝的办公室在城堡西塔的拐角，比地下教室干燥得多，却同样幽暗。壁炉里的火苗压得很低，橘光只够照亮书桌一角，其余的空间都沉在灰蓝色的阴影里。墙上挂着一幅褪色的傲罗合影，玻璃面蒙着薄灰，像刻意不去擦拭。
+  choices:
+  - text: 追问那个死去的学生的名字和当年的事
+  - text: 坦白自己“不属于这个世界”的秘密
+  rewards: ''

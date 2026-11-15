@@ -563,6 +563,9 @@ const decoder = new TextDecoder();
 
 输入一句话描述，SSE 流式返回生成进度，最终产出完整剧本包（元数据/角色/场景/剧情/世界书）。
 
+**内容安全前置检查**：描述命中涉黄 / 未成年人性化 / 自残方法 / 毒品制法 / 爆炸物制法 / 现实暴力煽动时，直接返回 `400`，`detail` 形如
+`您输入的描述包含不支持的内容（色情低俗、毒品制作方法），请调整后重试`，不消耗任何 LLM 调用。
+
 ---
 
 ## 六、AI 实时生成 API
@@ -580,6 +583,23 @@ const decoder = new TextDecoder();
 | `prompt` | string | 是 | 剧本描述（≤ 150 字） |
 
 **限流**：10 次/分钟（按客户端 IP）。
+
+**内容安全前置检查**：与 `/api/generate-script` 相同，命中即返回 `400` 并附带违规分类。
+
+**SSE 事件**（`/start` 与 `/choose` 共用）：
+
+| `type` | 说明 |
+|--------|------|
+| `story_seed` / `progress` | 故事种子与阶段进度（仅 `/start`） |
+| `scene_start` / `narration` / `narration_delta` / `dialogue` | 场景演出，对话条目含 `speaker` / `text` / `emotion` / `speaker_id`，动作旁白为 `type: "action"` + `subject` |
+| `bg_prompt` | 背景描述写完即推送，用于并行生图 |
+| `scene_end` | 场景结束，附 `choices` 与 **`quality`** 字段 |
+| `scene` / `done` / `error` | 非流式场景快照 / 结束 / 错误（`error.message` 可能是内容安全中文提示） |
+
+`scene_end.quality = {"passed": bool, "issues": [str]}` 来自 L1 质量硬门：只判定「必须重新生成才能修好」的问题
+（幻觉说话人、`speaker_id` 非法、对话少于 8 条、旁白少于 10 字）。说话人别名与情绪近义词由 L2 就地归一，
+不会触发重试。流式路径不撤回已推送内容，因此仅记录结论；预生成路径会带着 issues 重试一次，
+并把问题注入下一场景的 Prompt。
 
 ---
 
@@ -776,7 +796,7 @@ const decoder = new TextDecoder();
 
 | 状态码 | 场景 | 处理建议 |
 |:------:|------|----------|
-| 400 | 路径不存在 / 参数缺失 / 场景索引越界 | 检查请求参数 |
+| 400 | 路径不存在 / 参数缺失 / 场景索引越界 / 描述含不支持的内容（`detail` 附违规分类） | 检查请求参数；按 `detail` 中的分类改写描述 |
 | 404 | 会话不存在 / 路径不存在 | 确认 session_id 或 path 正确 |
 | 422 | 数据校验失败（Pydantic 模型校验） | 检查请求体格式 |
 | 500 | 内部错误（LLM JSON 解析失败等） | 查看服务端日志 |

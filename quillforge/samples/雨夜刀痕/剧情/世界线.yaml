@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 暴雨夜女侠凌霜抱血刀叩门求宿，驿卒沈默收留她。次日老捕头追至，沈默发现凌霜是旧案关键，必须在规矩与真相间抉择。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 雨夜叩门
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

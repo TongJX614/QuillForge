@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 过草地时，老班长用缝衣针弯成鱼钩钓鱼，熬汤给三个病号，自己却偷偷嚼草根。小梁发现真相，老班长最终牺牲，鱼钩成为精神信物。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 鱼汤疑云
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

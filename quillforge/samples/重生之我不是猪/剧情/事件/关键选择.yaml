@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 重生之猪圈惊魂
+  description: ''
+  options:
+  - id: choice_1
+    text: 先跟花妞搞好关系，套出养猪场的情报
+    leads_to_ending: null
+  - id: choice_2
+    text: 想办法引起人类注意，证明自己不是普通猪
+    leads_to_ending: null
+  - id: choice_3
+    text: 先冷静观察，摸清自己的活动范围和身体限制
+    leads_to_ending: null

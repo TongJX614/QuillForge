@@ -1,0 +1,25 @@
+main_plot:
+  summary: 广告总监陈大志醉后变成一头猪，被远房表舅老周拉进自家猪圈，离出栏只剩七天。他必须让兽医周小满相信自己是人，同时面对猪圈里阿花的灵魂拷问。
+  themes:
+  - 身份的重新认知
+  - 城市与乡村的价值碰撞
+  - 亲情与陪伴的迟到补偿
+  core_conflict: 一个坚信'人定胜天'的都市精英，被困在一具即将被送上屠宰台的猪身里，必须在七天之内证明自己是谁。
+  stages:
+  - name: 猪圈惊变
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 对牛弹琴
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 圈中旧事
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

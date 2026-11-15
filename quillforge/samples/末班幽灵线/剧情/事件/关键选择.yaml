@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 末班幽灵线·始发
+  description: ''
+  options:
+  - id: choice_1
+    text: 追问老周关于二十年前那趟车的事
+    leads_to_ending: null
+  - id: choice_2
+    text: 小声向小满打听她记得的事情
+    leads_to_ending: null
+  - id: choice_3
+    text: 不动声色观察车厢，记下每个乘客的细节
+    leads_to_ending: null

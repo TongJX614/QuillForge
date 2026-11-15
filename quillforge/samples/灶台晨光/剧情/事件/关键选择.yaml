@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 灶火自燃
+  description: ''
+  options:
+  - id: choice_1
+    text: 先盛一碗粥，坐下来慢慢吃
+    leads_to_ending: null
+  - id: choice_2
+    text: 追问阿灶关于外婆的事，弄清楚来龙去脉
+    leads_to_ending: null
+  - id: choice_3
+    text: 拒绝吃粥，坚持要卖掉老屋
+    leads_to_ending: null

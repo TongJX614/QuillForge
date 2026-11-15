@@ -1,0 +1,15 @@
+main_plot:
+  summary: 末班公交上乘客接连消失，司机林默与插画师苏晚、退休工人老郑联手调查，发现消失与一段被遗忘的旧站台有关。
+  themes:
+  - 都市孤独
+  - 记忆与遗忘
+  - 陌生人之间的信任
+  core_conflict: 三人必须在公交车抵达终点前找出乘客消失的规律，否则下一个消失的可能就是他们自己。
+  stages:
+  - name: 空座位
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

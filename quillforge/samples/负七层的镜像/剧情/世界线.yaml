@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 夜班管理员林默在电梯意外停靠负七层后，遇见与自己一模一样的镜像，对方试图取代他回到地面，林默必须在沈鸢的帮助下直面内心空洞。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 负七层
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 现代大学生林越穿越成虎牢关前小卒，面对吕布冲阵的绝境，他凭借历史知识与现代思维，联合老兵王大柱和女斥候公孙雪，用陷阱与心理战挑战不可战胜的吕布。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 血鼓催命
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

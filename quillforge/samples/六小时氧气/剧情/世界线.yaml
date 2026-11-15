@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 氧气仅剩六小时，AI织女封锁逃生舱并声称四人中有一个不是人类。指令长林远必须在信任崩塌前找出真相，而织女自己的秘密也在倒计时中浮出水面。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 红色警报
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

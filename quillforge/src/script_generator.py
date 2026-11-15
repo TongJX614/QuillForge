@@ -22,6 +22,7 @@ from typing import Generator
 from datetime import date
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from content_guard import ContentSafetyError, scan_input
 from llm_client import LLMClient
 from logger import get_logger
 
@@ -96,6 +97,8 @@ SYSTEM_PROMPT_STEP1B = """\
   确保在后续场景生成中角色行为保持一致——同一角色在不同场景中的性格、说话方式、
   价值观不能前后矛盾
 - voice_tone 字段要具体描述说话风格（口头禅、语气习惯、用词偏好），确保可辨识
+- 【内容安全 / 生图合规】appearance、personality、background 等字段会直接送入 AI 生图与语音模型，
+  严禁出现裸露、性暗示、血腥伤口、自残痕迹、毒品器具等露骨视觉描述；此类设定须改写为安全、中性的表达
 - 所有输出使用中文
 
 请严格按以下格式输出，不要添加任何额外说明：
@@ -122,6 +125,8 @@ SYSTEM_PROMPT_STEP2A = """\
 要求：
 - 4个场景（scene_01~scene_04），节奏紧凑
 - 2-3个结局（至少包含 good/normal/bad 中的两种）
+- 【内容安全】严禁设计涉及色情低俗、性暗示、暴力血腥、残忍虐待、政治敏感或其他违法违规的剧情与结局；
+  若上游设定包含此类内容，须以淡出、转场或概括的方式转化为安全、中性表达，不得扩展违规内容
 - 所有输出使用中文，内容精炼，避免冗长描述
 
 请严格按以下格式输出，不要添加任何额外说明：
@@ -151,6 +156,9 @@ SYSTEM_PROMPT_STEP2B = """\
 - 场景中的角色行为必须与角色设定一致：性格、说话风格、动机不能矛盾
 - 素材清单中场景背景的 details 字段只描述场景环境（地点/时间/天气/光影/建筑），
   绝对不要描述任何人物——背景图只生成场景不生成人物
+- 【内容安全 / 生图合规】description、atmosphere、details 会直接送入 AI 生图模型，
+  严禁出现裸露、血腥伤口、尸体、自残痕迹、毒品器具、真实武器制法等露骨描述，
+  改用氛围化、可安全绘制的表现（如"光影昏暗""烛火摇曳"）
 
 请严格按以下格式输出，不要添加任何额外说明：
 
@@ -176,6 +184,8 @@ SYSTEM_PROMPT_STEP2C = """\
 要求：
 - 每个 branching_point=true 的场景必须有一个对应的关键选择
 - 每个选择2-3个选项
+- 【内容安全】选项文本严禁涉及色情低俗、血腥虐待、政治敏感，以及真实危险行为指导
+  （制毒、制爆、自伤方法等）；玩家选择的后果用叙事代价表达，不用露骨细节
 - 所有输出使用中文，内容精炼
 
 请严格按以下格式输出，不要添加任何额外说明：
@@ -358,6 +368,10 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
     if len(user_input) > MAX_INPUT_LENGTH:
         yield {"type": "error", "message": f"描述不能超过{MAX_INPUT_LENGTH}字（当前{len(user_input)}字）"}
         return
+    verdict = scan_input(user_input, source="script_gen")
+    if verdict.blocked:
+        yield {"type": "error", "message": verdict.message}
+        return
 
     _sg_client = _build_script_gen_client()
 
@@ -373,6 +387,8 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
                 files = _parse_files_output(raw)
                 if "剧本元数据.yaml" in files and _validate_yaml(files["剧本元数据.yaml"]):
                     return files
+            except ContentSafetyError:
+                raise
             except Exception as e:
                 logger.warning("Step 1A attempt %d/%d failed: %s", attempt + 1, max_retries, e)
                 if attempt < max_retries - 1:
@@ -388,6 +404,8 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
                 files = _parse_files_output(raw)
                 if "主要角色.yaml" in files and _validate_yaml(files["主要角色.yaml"]):
                     return files
+            except ContentSafetyError:
+                raise
             except Exception as e:
                 logger.warning("Step 1B attempt %d/%d failed: %s", attempt + 1, max_retries, e)
                 if attempt < max_retries - 1:
@@ -438,6 +456,8 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
                 if "结局系统.yaml" in files and _validate_yaml(files["结局系统.yaml"]):
                     if "主线剧情.yaml" in files and _validate_yaml(files["主线剧情.yaml"]):
                         return files
+            except ContentSafetyError:
+                raise
             except Exception as e:
                 logger.warning("Step 2A attempt %d/%d failed: %s", attempt + 1, max_retries, e)
                 if attempt < max_retries - 1:
@@ -453,6 +473,8 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
                 files = _parse_files_output(raw)
                 if "场景清单.yaml" in files and _validate_yaml(files["场景清单.yaml"]):
                     return files
+            except ContentSafetyError:
+                raise
             except Exception as e:
                 logger.warning("Step 2B attempt %d/%d failed: %s", attempt + 1, max_retries, e)
                 if attempt < max_retries - 1:
@@ -498,6 +520,8 @@ def generate_script(user_input: str, max_retries: int = 1) -> Generator[dict, No
             logger.warning("Step 2C attempt %d/%d: validation failed, retrying", attempt + 1, max_retries)
             if attempt < max_retries - 1:
                 time.sleep(min(2 ** attempt, 10))
+        except ContentSafetyError:
+            raise
         except Exception as e:
             logger.warning("Step 2C attempt %d/%d failed: %s", attempt + 1, max_retries, e)
             if attempt < max_retries - 1:

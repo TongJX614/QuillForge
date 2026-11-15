@@ -162,11 +162,12 @@ class TestNarrativeSUTInit:
 
         assert sut.config == config
         mock_llm_client.assert_called_once()
-        assert len(sut.prompts) == 5
+        assert len(sut.prompts) == 6
         assert "system" in sut.prompts
         assert "narration" in sut.prompts
         assert "dialogue" in sut.prompts
         assert "choices" in sut.prompts
+        assert "personality_judge" in sut.prompts
 
     @patch("quillforge.sut.LLMClient")
     @patch("quillforge.sut.load_prompt")

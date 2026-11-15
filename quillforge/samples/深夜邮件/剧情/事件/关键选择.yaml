@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 匿名邮件
+  description: ''
+  options:
+  - id: choice_1
+    text: 立刻回邮件追问发件人身份，争取更多线索
+    leads_to_ending: null
+  - id: choice_2
+    text: 联系姜小满，让她帮忙查邮件服务器的来源
+    leads_to_ending: null
+  - id: choice_3
+    text: 按兵不动，先整理导师当年的原始数据备份，为明天见面做准备
+    leads_to_ending: null

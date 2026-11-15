@@ -54,11 +54,29 @@ class NarrativeValidator(Validator):
 
     VALID_IMPACTS = {"advance", "advance_risky", "stay_current", "side_branch"}
 
-    def __init__(self, context: AssembledContext, min_dialogues: int = 3, max_dialogues: int = 5):
+    def __init__(self, context: AssembledContext, min_dialogues: int = 3, max_dialogues: int = 5,
+                 thresholds: dict | None = None, judge=None):
+        """
+        Args:
+            thresholds: 验证阈值，来自 config/quillforge_config.yaml
+                quillforge.stages.validationGate.thresholds，支持键：
+                personalityMatchScore / worldlineAdherenceScore / worldlineAdherenceScoreFinal
+                / personalitySeverity / personalityJudge
+            judge: 可选的性格 LLM 评审回调 `judge(char, lines) -> float | None`，
+                由 Stage 5 注入（实现见 NarrativeSUT.judge_personality）。
+                关键词词表完全未命中时用它兜底，避免恒定中性分导致检查失效。
+        """
         self.context = context
         self.min_dialogues = min_dialogues
         self.max_dialogues = max_dialogues
+        _t = thresholds or {}
+        self.personality_threshold = float(_t.get("personalityMatchScore", 0.5))
+        self.personality_severity = str(_t.get("personalitySeverity", "high"))
+        self.personality_judge_enabled = bool(_t.get("personalityJudge", True))
+        self.worldline_threshold = float(_t.get("worldlineAdherenceScore", 0.12))
+        self.worldline_threshold_final = float(_t.get("worldlineAdherenceScoreFinal", 0.08))
         self.character_names = {c.name for c in context.active_characters}
+        self._judge = judge
 
     def validate_all(
         self,
@@ -159,9 +177,10 @@ class NarrativeValidator(Validator):
 
     def check_personality_match(self, dialogues: list[Dialogue]) -> ValidationCheck:
         """
-        性格匹配度检查（启发式）
-        通过关键词匹配判断对话是否体现角色性格
-        生产环境建议用 LLM 做二次评估
+        性格匹配度检查
+        主路径：性格关键词词表启发式打分
+        兜底：词表对本次角色零命中时，用注入的 LLM 评审回调打分（`personalityJudge`）
+        默认 severity=high，即性格违背会触发 Stage 5 重试（可在配置里降级）
         """
         # 性格 → 正面关键词 / 反面关键词
         personality_keywords = {
@@ -233,16 +252,20 @@ class NarrativeValidator(Validator):
         }
 
         scores = []
+        evidence = 0  # 词表实际命中的正/反面词次数，为 0 说明词表对本次角色无效
+        lines_by_char: dict[str, list[str]] = {}
         for d in dialogues:
             char = next((c for c in self.context.active_characters if c.name == d.speaker), None)
             if not char:
                 continue
+            lines_by_char.setdefault(char.name, []).append(d.text)
             score = 1.0  # 默认满分
             for trait in personality_keywords:
                 if trait in char.personality:
                     kw = personality_keywords[trait]
                     pos_hits = sum(1 for w in kw["positive"] if w in d.text)
                     neg_hits = sum(1 for w in kw["negative"] if w in d.text)
+                    evidence += pos_hits + neg_hits
                     if neg_hits > 0:
                         # 有反面词：从墓准线扣分
                         trait_score = max(0.0, 0.5 - neg_hits * 0.3 + pos_hits * 0.1)
@@ -256,13 +279,41 @@ class NarrativeValidator(Validator):
             scores.append(score)
 
         avg_score = sum(scores) / max(len(scores), 1)
-        ok = avg_score >= 0.5  # 启发式阈值放宽，生产环境用 LLM 评
+        judged = False
+
+        # 词表零命中 → 启发式分恒为中性值，改用 LLM 评审兜底
+        if evidence == 0 and scores and self._judge is not None and self.personality_judge_enabled:
+            judge_scores = []
+            for name, lines in lines_by_char.items():
+                char = next((c for c in self.context.active_characters if c.name == name), None)
+                if char is None:
+                    continue
+                try:
+                    s = self._judge(char, lines)
+                except Exception:
+                    s = None
+                if s is not None:
+                    judge_scores.append(float(s))
+            if judge_scores:
+                avg_score = sum(judge_scores) / len(judge_scores)
+                judged = True
+
+        ok = avg_score >= self.personality_threshold
+
+        if evidence == 0 and not judged:
+            # 既没命中词表也没有可用 LLM 评审：不阻塞，只提示检查未生效
+            severity = "medium"
+            detail = f"启发式得分 {avg_score:.2f}（性格词表未命中且未启用 LLM 评审，仅供参考）"
+        else:
+            severity = self.personality_severity
+            source = "LLM 评审" if judged else "启发式词表"
+            detail = f"{source}得分: {avg_score:.2f}"
 
         return ValidationCheck(
             name="personality_match",
             passed=ok,
-            severity="medium",
-            detail=f"启发式匹配得分: {avg_score:.2f}",
+            severity=severity,
+            detail=detail,
             score=round(avg_score, 2),
         )
 
@@ -329,7 +380,7 @@ class NarrativeValidator(Validator):
         node_score = min(1.0, node_mentioned / max(total_nodes_checked, 1))
         combined = scene_score * 0.7 + node_score * 0.3
         # 终局场景阈值略低（终局内容更偏情感/抉择，不易命中场景关键词）
-        threshold = 0.08 if is_final_scene else 0.12
+        threshold = self.worldline_threshold_final if is_final_scene else self.worldline_threshold
         ok = combined >= threshold
 
         detail_str = (

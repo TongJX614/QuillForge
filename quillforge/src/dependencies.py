@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
 from cachetools import TTLCache
@@ -36,7 +37,59 @@ def _get_session_ttl() -> int:
 SESSION_TTL = _get_session_ttl()
 
 
-class _RealtimeSessionCache(TTLCache):
+class _LockedTTLCache(TTLCache):
+    """线程安全的 TTLCache。
+
+    cachetools 非线程安全：FastAPI 同步路由在线程池中并发调用 get/__setitem__
+    会同时触发 expire() 内部突变。用 RLock 串行化所有公开访问。
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._lock = threading.RLock()
+
+    def __getitem__(self, key):
+        with self._lock:
+            return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            super().__setitem__(key, value)
+
+    def __delitem__(self, key):
+        with self._lock:
+            super().__delitem__(key)
+
+    def __contains__(self, key):
+        with self._lock:
+            return super().__contains__(key)
+
+    def get(self, key, default=None):
+        with self._lock:
+            return super().get(key, default)
+
+    def pop(self, key, *args):
+        with self._lock:
+            return super().pop(key, *args)
+
+    def expire(self, time=None):
+        with self._lock:
+            return super().expire(time)
+
+    def keys(self):
+        with self._lock:
+            return list(super().keys())
+
+    def items(self):
+        with self._lock:
+            return list(super().items())
+
+    def __len__(self):
+        with self._lock:
+            return super().__len__()
+
+
+class _RealtimeSessionCache(_LockedTTLCache):
     """TTLCache 子类：过期淘汰时自动关闭 RealtimeStorySession 的线程池。
 
     注意：cachetools 的 TTLCache.expire() 内部直接调用基类 Cache.__delitem__，
@@ -69,14 +122,15 @@ class _RealtimeSessionCache(TTLCache):
         return expired_items
 
 
-# ── 会话存储（TTL 自动过期）──
-sessions: TTLCache = TTLCache(maxsize=100, ttl=SESSION_TTL)
+# ── 会话存储（TTL 自动过期，线程安全）──
+sessions: _LockedTTLCache = _LockedTTLCache(maxsize=100, ttl=SESSION_TTL)
 realtime_sessions: _RealtimeSessionCache = _RealtimeSessionCache(maxsize=50, ttl=SESSION_TTL)
 uploaded_scripts: dict[str, dict] = {}  # script_id -> {path, adapter, summary}
 _loaded_stories: dict[str, dict] = {}  # path -> story data (轻量 API 缓存)
 
 # ── 单例 ──
 _harness: Optional[Harness] = None
+_harness_lock = threading.Lock()
 _image_generator: Optional[ImageGenerator] = None
 _tts_generator: Optional[TTSGenerator] = None
 
@@ -84,7 +138,9 @@ _tts_generator: Optional[TTSGenerator] = None
 def get_harness() -> Harness:
     global _harness
     if _harness is None:
-        _harness = create_default_harness()
+        with _harness_lock:
+            if _harness is None:
+                _harness = create_default_harness()
     return _harness
 
 

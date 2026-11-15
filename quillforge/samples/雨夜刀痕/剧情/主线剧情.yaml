@@ -1,0 +1,15 @@
+main_plot:
+  summary: 暴雨夜女侠凌霜抱血刀叩门求宿，驿卒沈默收留她。次日老捕头追至，沈默发现凌霜是旧案关键，必须在规矩与真相间抉择。
+  themes:
+  - 信任与背叛
+  - 规矩与良知
+  - 救赎与直面过去
+  core_conflict: 沈默坚守“来者是客”的驿站规矩，却要面对追捕凌霜的旧日上司与掩盖多年的真相。
+  stages:
+  - name: 雨夜叩门
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

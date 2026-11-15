@@ -1,0 +1,20 @@
+main_plot:
+  summary: 前消防员林远护送医学生陈小满和无线电工老周穿越废墟寻找余烬营地，途中遭遇变异犬灰狼和感染者群，三人必须在信任与生存之间做出抉择。
+  themes:
+  - 信任的代价
+  - 秩序与人性
+  - 生存中的选择
+  core_conflict: 在随时可能被感染和背叛的末日里，是否值得为了救一个可能变异的人而拖慢全队的逃生速度。
+  stages:
+  - name: 半句人声
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 静默的代价
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

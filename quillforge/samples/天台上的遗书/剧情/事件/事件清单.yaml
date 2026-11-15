@@ -1,0 +1,16 @@
+events:
+- id: event_01
+  name: 信纸上的空白
+  type: plot
+  description: 铁门在父亲身后合上，脚步声沿着楼梯一层层往下，最终被雨前的闷风吞没。你蹲回花盆旁，把信封放在膝盖上，
+  trigger_conditions: {}
+  location: 老小区天台西南角
+  time: 傍晚，天色将暗未暗
+  characters_involved:
+  - char_01
+  - char_02
+  content: 铁门在父亲身后合上，脚步声沿着楼梯一层层往下，最终被雨前的闷风吞没。你蹲回花盆旁，把信封放在膝盖上，深吸了一口气。封口没有粘死，只是折了两折，像是匆忙间塞进去的。你的手指有些抖，拆了两次才把信纸抽出来
+  choices:
+  - text: 立刻下楼去翻米缸，确认存折是否还在
+  - text: 追问陈屿那个人影的更多细节，比如衣着、动作
+  rewards: ''

@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 城市白领陈大雷回村散心，在养猪场借厕所时突然变成一头猪。他必须让老周和他闺女相信自己是人，同时躲过即将到来的出栏日。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 一睁眼，我裂开了
+  - scene_id: scene_02
+    sequence: 2
+    description: 称重台上的表演
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 雨夜便利店
+  description: ''
+  options:
+  - id: choice_1
+    text: 把热水倒进杯子，放在收银台边上，装作不经意地问老周关于那姑娘的事
+    leads_to_ending: null
+  - id: choice_2
+    text: 不接老周的话，转身继续整理货架，眼睛却不自觉地瞟向门口
+    leads_to_ending: null
+  - id: choice_3
+    text: 走到门口，把玻璃门推开一条缝，看看雨势
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 三点零七分的准时
+  description: ''
+  options:
+  - id: choice_1
+    text: 把饭团加热好，顺口问一句“你每天都这个点来，是刚下班吗”
+    leads_to_ending: null
+  - id: choice_2
+    text: 什么都不问，但把乌龙茶换成自己刚烧的热水，递过去时多看她一眼
+    leads_to_ending: null
+  - id: choice_3
+    text: 结完账，假装不经意地说“今天三点零七分，比昨天晚了两分钟”
+    leads_to_ending: null

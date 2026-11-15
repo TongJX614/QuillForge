@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 草地深处，通讯员石根生必须在断粮前把命令送到前卫营。炊事班长老葛和卫生员英子一路相助，三人要穿过沼泽、暴雨和饥饿，完成这场与时间的赛跑。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 草地黄昏
+  - scene_id: scene_02
+    sequence: 2
+    description: 泥沼夜行
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

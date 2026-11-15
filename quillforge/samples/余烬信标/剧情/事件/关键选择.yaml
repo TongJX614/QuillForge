@@ -1,0 +1,26 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 半句人声
+  description: ''
+  options:
+  - id: choice_1
+    text: 让老周继续调频，把完整信号抓出来
+    leads_to_ending: null
+  - id: choice_2
+    text: 先关掉收音机，处理门外的狗和伤者
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 静默的代价
+  description: ''
+  options:
+  - id: choice_1
+    text: 独自走向门口，用哨声试探那条狗的反应
+    leads_to_ending: null
+  - id: choice_2
+    text: 让老周先裹好收音机再开机，自己守在门边听动静
+    leads_to_ending: null
+  - id: choice_3
+    text: 先帮陈小满稳住伤者，等狗自己离开再行动
+    leads_to_ending: null

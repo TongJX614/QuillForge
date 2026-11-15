@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 雨夜旧货市场
+  description: ''
+  options:
+  - id: choice_1
+    text: 把复印件推到灯下，逼他先看那笔模糊的金额
+    leads_to_ending: null
+  - id: choice_2
+    text: 不接话，反问他今晚来之前见过谁
+    leads_to_ending: null
+  - id: choice_3
+    text: 示意老猫先关门，把这场对话挪到里屋
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 灯下对账
+  description: ''
+  options:
+  - id: choice_1
+    text: 答应赴约，但要佟佳鑫先交出一份当年经手人的名单
+    leads_to_ending: null
+  - id: choice_2
+    text: 不答应，转而让老猫连夜去查苏曼青的旧档案
+    leads_to_ending: null
+  - id: choice_3
+    text: 反问他：你让我去，是想让我当刀，还是想让我当挡箭牌
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 名单的重量
+  description: ''
+  options:
+  - id: choice_1
+    text: 收起名片，连夜去找名单上第三个人
+    leads_to_ending: null
+  - id: choice_2
+    text: 按兵不动，先回家研究名单和名片上的字迹
+    leads_to_ending: null
+  - id: choice_3
+    text: 追问佟佳鑫：苏曼青到底漏算了什么
+    leads_to_ending: null

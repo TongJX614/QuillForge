@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 第七站之前
+  description: ''
+  options:
+  - id: choice_1
+    text: 追问阿澈发卡的来历，逼他说清楚
+    leads_to_ending: null
+  - id: choice_2
+    text: 站起来走到驾驶座旁，要求老康解释规矩
+    leads_to_ending: null
+  - id: choice_3
+    text: 按兵不动，暗中记下每个人的座位和随身物品
+    leads_to_ending: null

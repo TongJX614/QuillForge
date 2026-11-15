@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 猪圈惊变
+  description: ''
+  options:
+  - id: choice_1
+    text: 拼命冲老周叫唤，用蹄子指自己，试图让他看出异常
+    leads_to_ending: null
+  - id: choice_2
+    text: 先忍着恶心吃几口，活下去才有机会想辙
+    leads_to_ending: null
+  - id: choice_3
+    text: 跟阿花打听清楚这养猪场的底细和出栏的日子
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 对牛弹琴
+  description: ''
+  options:
+  - id: choice_1
+    text: 趁老周去叫小满，继续在地上多写几个字，把'陈大志'三个字凑出来
+    leads_to_ending: null
+  - id: choice_2
+    text: 先安静下来吃东西，保存体力，等周小满来了再想办法证明
+    leads_to_ending: null
+  - id: choice_3
+    text: 转头问阿花，以前有没有别的猪也这样闹过，后来都怎么样了
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 圈中旧事
+  description: ''
+  options:
+  - id: choice_1
+    text: 趁周小满还没进门，赶紧在地上多划几个字，把“我是人”写清楚
+    leads_to_ending: null
+  - id: choice_2
+    text: 先装作普通猪安静下来，听听周小满和老周在门外说什么
+    leads_to_ending: null
+  - id: choice_3
+    text: 转头再问阿花一句：那头黑猪被熏之前，有没有留下什么记号
+    leads_to_ending: null

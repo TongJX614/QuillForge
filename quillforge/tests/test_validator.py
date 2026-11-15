@@ -483,3 +483,97 @@ class TestExtractKeywords:
     def test_empty_text(self):
         kws = NarrativeValidator._extract_keywords("")
         assert kws == []
+
+
+# ═══════════════════════════════════════════════════════
+# 性格匹配：阻塞级别 + LLM 评审兜底
+# ═══════════════════════════════════════════════════════
+
+class TestPersonalitySeverityAndJudge:
+    """personality_match 从 medium 提级为 high（阻塞重试），词表失效时用 LLM 评审兜底"""
+
+    def _no_trait_context(self):
+        """性格标签完全不在关键词词表里的角色 → 词表零命中"""
+        return make_context([make_char("角色A", "傲慢又多疑")])
+
+    def test_default_severity_is_high_when_evidence_exists(self):
+        """有词表证据或有 LLM 评审时，性格违背按 high 阻塞"""
+        hit_validator = NarrativeValidator(make_context([make_char("角色A", "冷静")]))
+        result = hit_validator.check_personality_match(
+            [make_dialogue("角色A", "天哪完了完了救命")]
+        )
+        assert result.severity == "high"
+        assert result.passed is False
+
+        judged = NarrativeValidator(self._no_trait_context(), judge=lambda c, l: 0.4)
+        result2 = judged.check_personality_match([make_dialogue("角色A", "随便一句台词")])
+        assert result2.severity == "high"
+
+    def test_keyword_violation_blocks_overall_validation(self):
+        """反面词命中（冷静角色大量情绪化惊呼）应让整体验证不通过"""
+        validator = NarrativeValidator(make_context([make_char("角色A", "冷静")]), min_dialogues=1)
+        res = validator.validate_all(
+            narration="这是一段足够长的开场旁白文本",
+            dialogues=[make_dialogue("角色A", "啊啊啊天哪完了完了救命")],
+            choices=[make_choice("继续", "advance")],
+        )
+        personality = next(c for c in res.checks if c.name == "personality_match")
+        assert personality.passed is False
+        assert res.passed is False
+
+    def test_judge_used_when_keyword_table_misses(self):
+        calls = []
+
+        def fake_judge(char, lines):
+            calls.append((char.name, len(lines)))
+            return 0.3
+
+        validator = NarrativeValidator(self._no_trait_context(), judge=fake_judge)
+        result = validator.check_personality_match(
+            [make_dialogue("角色A", "台词内容"), make_dialogue("角色A", "另一句台词")]
+        )
+        assert calls == [("角色A", 2)]
+        assert result.score == 0.3
+        assert result.passed is False
+        assert "LLM 评审" in result.detail
+
+    def test_judge_not_used_when_keywords_hit(self):
+        calls = []
+
+        def fake_judge(char, lines):
+            calls.append(char.name)
+            return 0.1
+
+        validator = NarrativeValidator(
+            make_context([make_char("角色A", "冷静")]), judge=fake_judge
+        )
+        validator.check_personality_match([make_dialogue("角色A", "数据分析显示概率合理")])
+        assert calls == []
+
+    def test_no_judge_falls_back_to_medium(self):
+        """词表零命中且未注入评审回调时，降级为 medium，不阻塞生成"""
+        validator = NarrativeValidator(self._no_trait_context())
+        result = validator.check_personality_match([make_dialogue("角色A", "随便一句台词")])
+        assert result.severity == "medium"
+        assert "仅供参考" in result.detail
+
+    def test_judge_can_be_disabled_by_config(self):
+        def fake_judge(char, lines):
+            return 0.1
+
+        validator = NarrativeValidator(
+            self._no_trait_context(),
+            thresholds={"personalityJudge": False},
+            judge=fake_judge,
+        )
+        result = validator.check_personality_match([make_dialogue("角色A", "随便一句台词")])
+        assert result.severity == "medium"
+
+    def test_judge_exception_does_not_block(self):
+        def broken_judge(char, lines):
+            raise RuntimeError("LLM 挂了")
+
+        validator = NarrativeValidator(self._no_trait_context(), judge=broken_judge)
+        result = validator.check_personality_match([make_dialogue("角色A", "台词")])
+        assert result.passed is True  # 退回启发式中性分
+        assert result.score >= 0.5

@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 记者你踏入老周家猪圈瞬间变猪，与傲娇母猪大花结盟，在七天期限里既要躲避被卖掉的命运，又要设法让老周真心夸你一句。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 猪圈惊变
+  - scene_id: scene_02
+    sequence: 2
+    description: 食槽边的暗战
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

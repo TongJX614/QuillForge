@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 空座上的外套
+  description: ''
+  options:
+  - id: choice_1
+    text: 让司机在纺织厂宿舍站停车，全员下车清点人数
+    leads_to_ending: null
+  - id: choice_2
+    text: 留在车上，仔细检查老人留下的外套和塑料袋
+    leads_to_ending: null
+  - id: choice_3
+    text: 追问老周三十年前那晚的细节
+    leads_to_ending: null

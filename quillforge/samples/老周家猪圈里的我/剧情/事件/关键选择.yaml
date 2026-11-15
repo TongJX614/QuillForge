@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 一睁眼，我裂开了
+  description: ''
+  options:
+  - id: choice_1
+    text: 拼命挣扎，用蹄子扒拉栏杆，试图让周小满注意到自己“不正常”
+    leads_to_ending: null
+  - id: choice_2
+    text: 先装乖，让老周顺利称完重，再找机会单独跟老黄打听情况
+    leads_to_ending: null
+  - id: choice_3
+    text: 趁老周开栏门的瞬间，一头撞出去，先逃离这个鬼地方再说
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 称重台上的表演
+  description: ''
+  options:
+  - id: choice_1
+    text: 趁热打铁，用蹄子在地上划拉出个“人”字，让周小满彻底相信
+    leads_to_ending: null
+  - id: choice_2
+    text: 先消停两天，观察老周家的作息规律，摸清逃跑路线
+    leads_to_ending: null
+  - id: choice_3
+    text: 跟老黄套近乎，打听这圈里有没有别的“怪事”
+    leads_to_ending: null

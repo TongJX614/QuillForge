@@ -99,9 +99,6 @@ class Harness:
             extra = {}
             harness_input = input_data
 
-        # 覆盖模型配置
-        if harness_input.options.model:
-            sut = None  # 由调用方处理
         return harness_input, ExtraContext.from_dict(extra)
 
     def _build_prepared_context(
@@ -118,6 +115,15 @@ class Harness:
             assembled=assembled,
             rendered_system_prompt=rendered_sys_prompt,
             extra=extra,
+        )
+
+    def _get_thresholds(self) -> dict:
+        """从配置读取验证阈值（quillforge.stages.validationGate.thresholds）"""
+        return (
+            self.config.get("quillforge", {})
+            .get("stages", {})
+            .get("validationGate", {})
+            .get("thresholds", {}) or {}
         )
 
     def _apply_fallback(
@@ -155,6 +161,8 @@ class Harness:
             ctx.assembled,
             min_dialogues=min_req,
             max_dialogues=harness_input.options.dialogue_count_max,
+            thresholds=self._get_thresholds(),
+            judge=self.sut.judge_personality,
         )
         validation = validator.validate_all(narration, dialogues, choices, retry_count=max_retries + 1)
         return dialogues, validation
@@ -195,8 +203,6 @@ class Harness:
 
         # ── 0. 准备输入 ──
         harness_input, extra = self._prepare_input(input_data)
-        if harness_input.options.model:
-            self.sut.llm.model = harness_input.options.model
 
         # ── 通知 observers: run start ──
         self._notify("on_run_start", harness_input)
@@ -220,6 +226,7 @@ class Harness:
         dialogues: list[Dialogue] = []
         choices: list[Choice] = []
         validation: Optional[ValidationResult] = None
+        feedback = ""
 
         narrative_stage: NarrativeStage = self.stages["narrative"]
         dialogue_stage: DialogueStage = self.stages["dialogue"]
@@ -229,47 +236,54 @@ class Harness:
         for attempt in range(max_retries + 1):
             if attempt > 0:
                 self._notify("on_retry", attempt)
-                logger.info("  [RETRY] 重试第 %d 次...", attempt)
+                logger.info("  [RETRY] 重试第 %d 次，修正项: %s", attempt, feedback)
 
             # ── Stage 2: Narrative Anchoring ──
             self._notify("on_stage_start", 2, "narrative_anchoring")
             logger.info("[Stage 2/5] 叙事锚定 (attempt %d)...", attempt + 1)
-            narration = narrative_stage.execute(ctx, self.sut, harness_input, extra)
+            narration = narrative_stage.execute(ctx, self.sut, harness_input, extra, feedback=feedback)
             narration = NarrativeStage.truncate(narration, 250)
             self._notify("on_narration_complete", narration)
             self._notify("on_stage_complete", 2, narration)
 
-            # ── Stage 3: Dialogue Generation ──
+            # ── Stage 3+4: 对话与选项合并为一次 LLM 调用 ──
             self._notify("on_stage_start", 3, "dialogue_generation")
             logger.info("[Stage 3/5] 对话生成 (attempt %d)...", attempt + 1)
-            dialogues = dialogue_stage.execute(ctx, self.sut, harness_input, extra, narration=narration)
+            dialogues, merged_choices = dialogue_stage.execute(
+                ctx, self.sut, harness_input, extra, narration=narration, feedback=feedback)
             dialogues = dialogues[:15]  # 硬上限15轮
             self._notify("on_stage_complete", 3, dialogues)
 
-            # ── Stage 4: Choice Branching ──
+            # Stage 4：对话输出附带选项 > 独立选项生成（回退）；剧本预设选项在 stage 内跳过
             self._notify("on_stage_start", 4, "choice_branching")
-            choices = choices_stage.execute(ctx, self.sut, harness_input, extra, narration=narration, dialogues=dialogues)
+            if merged_choices:
+                choices = merged_choices
+                logger.info("[Stage 4/5] 选择分支 (复用对话阶段附带选项，节省一次调用)")
+            else:
+                choices = choices_stage.execute(
+                    ctx, self.sut, harness_input, extra,
+                    narration=narration, dialogues=dialogues, feedback=feedback)
             self._notify("on_choices", choices)
             self._notify("on_stage_complete", 4, choices)
 
             # ── Stage 5: Validation Gate ──
             self._notify("on_stage_start", 5, "validation_gate")
             logger.info("[Stage 5/5] 验证门控 (attempt %d)...", attempt + 1)
-            validator = NarrativeValidator(
-                ctx.assembled,
-                min_dialogues=harness_input.options.dialogue_count_min,
-                max_dialogues=harness_input.options.dialogue_count_max,
-            )
-            validation = validator.validate_all(narration, dialogues, choices, retry_count=attempt)
+            validation = validation_stage.execute(
+                ctx, self.sut, harness_input, extra,
+                narration=narration, dialogues=dialogues, choices=choices, retry_count=attempt)
             self._notify("on_validation", validation)
             self._notify("on_stage_complete", 5, validation)
 
             if validation.passed:
                 logger.info("  [OK] 验证通过")
                 break
-            else:
-                failed = [c.name for c in validation.checks if not c.passed]
-                logger.info("  [FAIL] 验证未通过: %s", failed)
+            failed = [c.name for c in validation.checks if not c.passed]
+            logger.info("  [FAIL] 验证未通过: %s", failed)
+            # 将失败原因反馈给下一轮 Prompt，避免相同失败重复出现
+            feedback = "; ".join(
+                f"{c.name}: {c.detail}" for c in validation.checks if not c.passed
+            )
 
         # ── 4. Fallback 检查 ──
         dialogues, validation = self._apply_fallback(
@@ -296,8 +310,6 @@ class Harness:
         try:
             # ── 0. 准备输入 ──
             harness_input, extra = self._prepare_input(input_data)
-            if harness_input.options.model:
-                self.sut.llm.model = harness_input.options.model
 
             # ── 1. Fixture: 准备上下文 ──
             ctx = self._build_prepared_context(harness_input, extra)
@@ -318,22 +330,24 @@ class Harness:
             dialogues: list[Dialogue] = []
             choices: list[Choice] = []
             validation: Optional[ValidationResult] = None
+            feedback = ""
 
             narrative_stage: NarrativeStage = self.stages["narrative"]
             dialogue_stage: DialogueStage = self.stages["dialogue"]
             choices_stage: ChoicesStage = self.stages["choices"]
+            validation_stage: ValidationStage = self.stages["validation"]
 
             for attempt in range(max_retries + 1):
                 if attempt > 0:
                     yield {"event": "retry", "attempt": attempt}
-                    logger.info("  [Stream RETRY] 重试第 %d 次...", attempt)
+                    logger.info("  [Stream RETRY] 重试第 %d 次，修正项: %s", attempt, feedback)
 
                 # ── Stage 2: Narrative Anchoring（逐字流式推送，硬截断≤250字）──
                 yield {"event": "stage", "stage": 2, "message": "正在生成旁白..."}
                 logger.info("[Stream Stage 2/5] 叙事锚定 (attempt %d)...", attempt + 1)
                 yield {"event": "narration_start"}
                 narration = ""
-                _narr_stream = narrative_stage.execute_stream(ctx, self.sut, harness_input, extra)
+                _narr_stream = narrative_stage.execute_stream(ctx, self.sut, harness_input, extra, feedback=feedback)
                 for evt in _narr_stream:
                     if evt.get("event") == "narration_delta":
                         narration += evt["delta"]
@@ -346,14 +360,19 @@ class Harness:
                 narration = NarrativeStage.truncate(narration, 250)
                 yield {"event": "narration", "text": narration}
 
-                # ── Stage 3: Dialogue Generation（流式：逐条推送）──
+                # ── Stage 3+4: 对话与选项合并为一次 LLM 调用（流式：逐条推送）──
                 yield {"event": "stage", "stage": 3, "message": "正在生成对话..."}
                 logger.info("[Stream Stage 3/5] 对话生成 (attempt %d)...", attempt + 1)
                 dialogues = []
+                merged_choices: list[Choice] = []
                 _action_count = 0
                 _dlg_since_last_action = 0
-                for item in dialogue_stage.execute_stream(ctx, self.sut, harness_input, extra, narration=narration):
-                    if item["kind"] == "dialogue":
+                for item in dialogue_stage.execute_stream(ctx, self.sut, harness_input, extra,
+                                                          narration=narration, feedback=feedback):
+                    kind = item["kind"]
+                    if kind == "choices":
+                        merged_choices = item["choices"]
+                    elif kind == "dialogue":
                         if len(dialogues) >= 15:
                             continue
                         d = item["dialogue"]
@@ -368,25 +387,30 @@ class Harness:
 
                 # ── Stage 4: Choice Branching ──
                 yield {"event": "stage", "stage": 4, "message": "正在生成选项..."}
-                choices = choices_stage.execute(ctx, self.sut, harness_input, extra, narration=narration, dialogues=dialogues)
+                if merged_choices:
+                    choices = merged_choices
+                    logger.info("[Stream Stage 4/5] 选择分支 (复用对话阶段附带选项，节省一次调用)")
+                else:
+                    choices = choices_stage.execute(ctx, self.sut, harness_input, extra,
+                                                    narration=narration, dialogues=dialogues,
+                                                    feedback=feedback)
                 yield {"event": "choices", "choices": [c.to_dict() for c in choices]}
 
                 # ── Stage 5: Validation Gate ──
                 yield {"event": "stage", "stage": 5, "message": "正在验证..."}
                 logger.info("[Stream Stage 5/5] 验证门控 (attempt %d)...", attempt + 1)
-                validator = NarrativeValidator(
-                    ctx.assembled,
-                    min_dialogues=harness_input.options.dialogue_count_min,
-                    max_dialogues=harness_input.options.dialogue_count_max,
-                )
-                validation = validator.validate_all(narration, dialogues, choices, retry_count=attempt)
+                validation = validation_stage.execute(
+                    ctx, self.sut, harness_input, extra,
+                    narration=narration, dialogues=dialogues, choices=choices, retry_count=attempt)
 
                 if validation.passed:
                     logger.info("  [OK] 验证通过")
                     break
-                else:
-                    failed = [c.name for c in validation.checks if not c.passed]
-                    logger.info("  [FAIL] 验证未通过: %s", failed)
+                failed = [c.name for c in validation.checks if not c.passed]
+                logger.info("  [FAIL] 验证未通过: %s", failed)
+                feedback = "; ".join(
+                    f"{c.name}: {c.detail}" for c in validation.checks if not c.passed
+                )
 
             # ── 4. Fallback 检查 ──
             min_req = harness_input.options.dialogue_count_min
@@ -445,13 +469,19 @@ def create_default_harness(config_path: Optional[str] = None) -> Harness:
     # 1. 创建 SUT
     sut = NarrativeSUT(config)
 
-    # 2. 创建 5 个 Stage
+    # 2. 创建 5 个 Stage（验证阶段注入配置阈值）
+    thresholds = (
+        config.get("quillforge", {})
+        .get("stages", {})
+        .get("validationGate", {})
+        .get("thresholds")
+    )
     stages = {
         "context_assembly": ContextAssemblyStage(),
         "narrative": NarrativeStage(),
         "dialogue": DialogueStage(),
         "choices": ChoicesStage(),
-        "validation": ValidationStage(),
+        "validation": ValidationStage(thresholds=thresholds),
     }
 
     # 3. 创建 Fallback

@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 雨夜担架
+  description: ''
+  options:
+  - id: choice_1
+    text: 坚持让赵铁柱多派一队人抢占左侧高地，哪怕耽误行军也要先探明敌情。
+    leads_to_ending: null
+  - id: choice_2
+    text: 相信记忆中的历史走向，劝赵铁柱按原计划快速通过，不做多余部署。
+    leads_to_ending: null
+  - id: choice_3
+    text: 先让苏静扶自己下担架，亲自到队前观察地形再决定。
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 岭上枪声
+  description: ''
+  options:
+  - id: choice_1
+    text: 建议赵铁柱带一挺机枪绕到右侧，等敌人探头时形成交叉火力
+    leads_to_ending: null
+  - id: choice_2
+    text: 让苏静带伤员和炊事班先悄悄往后撤，留战斗人员断后
+    leads_to_ending: null
+  - id: choice_3
+    text: 亲自摸到大石头边，近距离观察敌人马灯的位置和人数
+    leads_to_ending: null

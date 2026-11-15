@@ -1,0 +1,25 @@
+main_plot:
+  summary: 蒙古大军围困襄阳，郭靖黄蓉死守孤城。金轮法王携武林高手助阵，杨过意外卷入。忠义与私仇、守城与破城，一场决定天下命运的决战在烽火中展开。
+  themes:
+  - 家国大义与个人恩怨
+  - 坚守与变通
+  - 侠之大者的真正含义
+  core_conflict: 郭靖以残兵守孤城、明知不可为而为之的忠义，与金轮法王助蒙古一统天下、欲以武力证道的执念，形成不可调和的正面碰撞。
+  stages:
+  - name: 夜雨孤城
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 聚义厅夜议
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 灯下问心
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

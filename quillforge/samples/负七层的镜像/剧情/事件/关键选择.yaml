@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 负七层
+  description: ''
+  options:
+  - id: choice_1
+    text: 后退一步，明确否认对方的存在
+    leads_to_ending: null
+  - id: choice_2
+    text: 站在原地，反问对方“换回来”是什么意思
+    leads_to_ending: null
+  - id: choice_3
+    text: 转身冲向电梯，试图原路返回
+    leads_to_ending: null

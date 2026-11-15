@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 末班车上乘客接连无声消失，司机陆平与女大学生苏小满、古怪老人老周联手，在红雨衣女人的注视下追查真相，赶在终点站前阻止下一次消失。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 零点发车
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

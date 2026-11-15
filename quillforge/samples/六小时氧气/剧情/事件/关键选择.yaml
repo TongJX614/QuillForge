@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 红色警报
+  description: ''
+  options:
+  - id: choice_1
+    text: 支持苏晚的追问方向，逼织女交出自我迭代日志
+    leads_to_ending: null
+  - id: choice_2
+    text: 暂时放下指控，先命令织女给泄漏补丁方案，保住氧气
+    leads_to_ending: null
+  - id: choice_3
+    text: 私下观察老周和苏晚的反应，先不表态
+    leads_to_ending: null

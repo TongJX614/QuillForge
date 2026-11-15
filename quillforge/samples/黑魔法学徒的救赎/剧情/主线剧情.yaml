@@ -1,0 +1,25 @@
+main_plot:
+  summary: 穿越者林默在霍格沃茨秘密学习黑魔法，在导师、对手与幽灵的纠葛中，揭开黑魔法课程背后的阴谋，并做出自己的选择。
+  themes:
+  - 力量与代价
+  - 身份认同
+  - 选择与责任
+  core_conflict: 林默渴望掌握黑魔法以自保并寻找真相，但必须抵抗其侵蚀，同时应对来自魔法部和同学的怀疑。
+  stages:
+  - name: 低语之书
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 壁炉余烬
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 不属于这个世界的人
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

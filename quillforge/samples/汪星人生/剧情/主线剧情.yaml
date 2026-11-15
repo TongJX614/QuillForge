@@ -1,0 +1,19 @@
+main_plot:
+  summary: 程序员林小凡变成柯基，被女孩苏小暖收养，在流浪狗老黄帮助下揭露宠物店老板阿杰的非法勾当，最终找到变回人类的方法，却面临留下还是离开的抉择。
+  themes:
+  - 身份认同
+  - 人与动物的羁绊
+  core_conflict: 主角想变回人类，但作为狗他能帮助苏小暖揭露恶行，变回人后反而失去这份能力。
+  stages:
+  - name: 加班惊变
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 土豆的第一夜
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

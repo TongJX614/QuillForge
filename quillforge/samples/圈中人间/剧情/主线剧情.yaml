@@ -1,0 +1,20 @@
+main_plot:
+  summary: 白领周小满回老家帮忙，一觉醒来变成父亲猪圈里的猪，他必须在被卖掉之前，用猪的身份让家人认出自己。
+  themes:
+  - 亲情与理解
+  - 身份与归属
+  - 乡土与代际隔阂
+  core_conflict: 周小满想证明“我是你儿子”，但老周只看见一头行为古怪、该卖就卖的猪。
+  stages:
+  - name: 一觉醒来四条腿
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 一声哼叫惊了娘
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 末班车的遗落物
+  description: ''
+  options:
+  - id: choice_1
+    text: 把手机揣好，下车直奔值班室找老周。
+    leads_to_ending: null
+  - id: choice_2
+    text: 先不回值班室，独自去监控室调取今晚的录像。
+    leads_to_ending: null
+  - id: choice_3
+    text: 掏出自己的手机，拨给夜班编辑苏晚。
+    leads_to_ending: null

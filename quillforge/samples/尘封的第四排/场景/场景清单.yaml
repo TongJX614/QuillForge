@@ -1,0 +1,34 @@
+scenes:
+- id: scene_01
+  name: 道具箱底的戏票
+  location: 老剧场后台
+  time: 傍晚
+  atmosphere: 昏黄、积尘、隐约的樟脑味，日光灯管发出电流的嗡鸣
+  description: 日光灯管闪了两下才稳住，把后台照成一片惨白。你蹲在道具箱前，指尖触到箱底一层薄灰下的硬纸边缘。抽出来是一张戏票，泛黄发脆，票面印着十年前的字样，日期停在剧团解散那天，座位栏里写着第四排七号。你捏着它，像捏着一片不该存在的证词。门外传来脚步声和灯架磕碰门框的闷响，周野的大嗓门先一步挤进门缝，林知夏跟在他身后，手机屏幕的冷光映在她脸上。
+  trigger_conditions:
+    type: game_start
+  characters_present:
+  - char_01
+  - char_02
+  - char_03
+  interactions: []
+  assets_needed: []
+  branching_point: true
+  critical_choice: ''
+  narrative_notes: 老剧场后台的杂物间，傍晚的光从高窗斜射进来，照亮空气中浮动的灰尘。墙边堆着褪色的道具箱和衣架，几件旧戏服挂在角落。头顶一盏日光灯管忽明忽暗，发出微弱电流声。地面是磨得发亮的水磨石，墙角有剥落的墙皮。
+- id: scene_02
+  name: 财务室的存根
+  location: 老剧场二楼财务室
+  time: 傍晚
+  atmosphere: 逼仄、沉闷、尘埃在斜射的夕光中悬浮
+  description: 你把票收进外衣内袋，扣好扣子，动作不快，却不容商量。周野张了张嘴，到底没吭声，扛起灯架跟在后头。林知夏收起手机，快步跟上，鞋跟敲在水磨石楼梯上，一声声清响。财务室在二楼尽头，门锁锈得厉害，你拧了三次才开。铁皮档案柜立在墙角，柜门半开，里头票据册码得整整齐齐，按年份用麻绳捆着。夕阳从百叶窗缝里斜切进来，照亮屋里悬浮的尘粒。你拉开标着十年前的抽屉，指尖在册脊上一册册点过去，停住了——那一年的存根册，少了一本。
+  trigger_conditions: {}
+  characters_present:
+  - char_01
+  - char_02
+  - char_03
+  interactions: []
+  assets_needed: []
+  branching_point: false
+  critical_choice: ''
+  narrative_notes: 一间狭小的老式财务室，铁皮档案柜锈迹斑斑，柜门半开，抽屉里塞满发黄的票据册。窗外的夕光斜斜切进来，在积灰的地板上投下长条光斑。墙上挂着一面停摆的挂钟，桌上一台老式算盘和几摞牛皮纸信封。空气里飘着纸张霉变和陈年墨水的味道。

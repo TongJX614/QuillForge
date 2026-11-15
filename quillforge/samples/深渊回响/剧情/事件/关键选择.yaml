@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 舱壁上的敲击
+  description: ''
+  options:
+  - id: choice_1
+    text: 立刻循着敲击声寻找舱壁上的振动源，自己先查个究竟
+    leads_to_ending: null
+  - id: choice_2
+    text: 说服阿澈一起去找沈月上报，让阿澈作为第二目击人
+    leads_to_ending: null
+  - id: choice_3
+    text: 先不动声色，把录音存好，天亮后暗中比对全站声呐日志
+    leads_to_ending: null

@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 林默在地铁座位下捡到一部手机，锁屏推送着明天日期的新闻，配图里是他自己。他与夜班编辑苏晚、老站务员老周一起追查，却撞上自称'数据回收员'的顾衍——手机必须还回去，而还回去的代价，是让推送成真。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 末班车的遗落物
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

@@ -45,6 +45,7 @@ class ChoicesStage(StageBase):
         extra: dict,
         narration: str = "",
         dialogues: list[Dialogue] = None,
+        feedback: str = "",
     ) -> list[Choice]:
         """
         生成选择分支。
@@ -67,11 +68,12 @@ class ChoicesStage(StageBase):
                 for c in script_choices_raw
             ]
 
-        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, narration, dialogues, sut)
+        user_prompt = self._build_prompt(ctx.assembled, input_data, extra, narration, dialogues, sut, feedback=feedback)
         choices: list[Choice] = []
 
         try:
-            raw_choices = sut.call_json(ctx.rendered_system_prompt, user_prompt)
+            raw_choices = sut.call_json(ctx.rendered_system_prompt, user_prompt,
+                                        model=input_data.options.model or "")
         except (ValueError, json.JSONDecodeError, KeyError) as e:
             logger.info("  [CHOICES] LLM JSON 解析失败: %s", e)
             return choices
@@ -95,9 +97,10 @@ class ChoicesStage(StageBase):
         extra: dict,
         narration: str = "",
         dialogues: list[Dialogue] = None,
+        feedback: str = "",
     ) -> Generator[dict, None, list[Choice]]:
         """流式生成选项（选项通常一次性返回，流式仅包装为事件）"""
-        choices = self.execute(ctx, sut, input_data, extra, narration, dialogues)
+        choices = self.execute(ctx, sut, input_data, extra, narration, dialogues, feedback)
         yield {"event": "choices", "choices": [c.to_dict() for c in choices]}
         return choices
 
@@ -109,6 +112,7 @@ class ChoicesStage(StageBase):
         narration: str,
         dialogues: list[Dialogue],
         sut: NarrativeSUT,
+        feedback: str = "",
     ) -> str:
         """构建选择分支的 user prompt"""
         variables = self._common_variables(extra)
@@ -119,5 +123,6 @@ class ChoicesStage(StageBase):
             "currentNode": assembled.current_node,
             "nextNode": assembled.next_node or "（终局）",
             "worldlineProgress": int(assembled.worldline_progress * 100),
+            "retryFeedback": feedback,
         })
         return sut.render_template(sut.prompts["choices"], variables)

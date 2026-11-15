@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 雪线下的银元
+  description: ''
+  options:
+  - id: choice_1
+    text: 把三块银元原样包好，等明天追上前面队伍，一分不少交给连部
+    leads_to_ending: null
+  - id: choice_2
+    text: 先压下这事，私下再问老周，弄清楚银元的来路
+    leads_to_ending: null
+  - id: choice_3
+    text: 当众把银元拿出来，让全连战士都晓得这回事，一起拿主意
+    leads_to_ending: null

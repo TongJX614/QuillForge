@@ -68,7 +68,6 @@ def generate_scene_stream(session_id: str):
     def event_stream():
         import concurrent.futures as _cf
         tts_futures: dict = {}
-        first_dialogue_tts = True
 
         queue_idx = -1
         narration_delta_first = False
@@ -97,39 +96,7 @@ def generate_scene_stream(session_id: str):
                 elif evt_type in ("dialogue", "action"):
                     queue_idx += 1
 
-                # ── 第一句 dialogue：同步生成 TTS，文字+音频一起下发 ──
-                if (evt_type == "dialogue" and tts_gen.enabled
-                        and first_dialogue_tts):
-                    first_dialogue_tts = False
-                    speaker = evt.get("speaker", "")
-                    text = evt.get("text", "")
-                    tts_url = None
-                    if speaker and text:
-                        voice_id = tts_gen.get_voice_id(speaker, characters)
-                        tts_url = tts_gen.generate(
-                            script_slug, speaker, text, voice_id
-                        )
-                    payload = json.dumps(evt, ensure_ascii=False)
-                    yield f"event: {evt_type}\ndata: {payload}\n\n"
-                    if tts_url:
-                        _tts_evt = {"event": "tts", "speaker": speaker,
-                                    "url": tts_url, "lineIdx": queue_idx}
-                        _tts_payload = json.dumps(_tts_evt, ensure_ascii=False)
-                        yield f"event: tts\ndata: {_tts_payload}\n\n"
-                    _done = [f for f in tts_futures if f.done()]
-                    for fut in _done:
-                        _sp, _idx = tts_futures.pop(fut)
-                        try:
-                            _u = fut.result()
-                            if _u:
-                                _te = {"event": "tts", "speaker": _sp,
-                                       "url": _u, "lineIdx": _idx}
-                                yield f"event: tts\ndata: {json.dumps(_te, ensure_ascii=False)}\n\n"
-                        except Exception as e:
-                            logger.warning("[session] TTS future 结果获取失败: %s", e)
-                    continue
-
-                # ── 正常流程：先下发事件 ──
+                # ── 先下发事件（含首句 dialogue，TTS 全部异步化，不阻塞 SSE 流）──
                 payload = json.dumps(evt, ensure_ascii=False)
                 yield f"event: {evt_type}\ndata: {payload}\n\n"
 

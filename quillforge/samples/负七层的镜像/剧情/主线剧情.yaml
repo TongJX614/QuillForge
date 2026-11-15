@@ -1,0 +1,15 @@
+main_plot:
+  summary: 夜班管理员林默在电梯意外停靠负七层后，遇见与自己一模一样的镜像，对方试图取代他回到地面，林默必须在沈鸢的帮助下直面内心空洞。
+  themes:
+  - 自我认同
+  - 孤独与陪伴
+  - 记忆的价值
+  core_conflict: 林默必须承认并接纳自己内心的孤独，否则镜像将取代他的存在。
+  stages:
+  - name: 负七层
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

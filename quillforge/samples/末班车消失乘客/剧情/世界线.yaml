@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 末班公交上乘客接连消失，司机林默与插画师苏晚、退休工人老郑联手调查，发现消失与一段被遗忘的旧站台有关。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 空座位
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

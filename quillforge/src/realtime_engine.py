@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from llm_client import LLMClient, extract_json as _extract_json
 from logger import get_logger, bind_context, clear_context
+from content_guard import ContentSafetyError, scan_input
 from image_gen import (
     build_character_prompt, build_background_prompt,
     slugify, DEFAULT_BG_SIZE, DEFAULT_CHAR_SIZE,
@@ -63,7 +64,9 @@ def _build_realtime_client() -> LLMClient:
         model=model,
         temperature=0.85,
         max_tokens=6000,
-        timeout=180.0,
+        # 流式读超时是「chunk 间隔」而非总时长：正常生成约 250 tok/s，
+        # 75s 无 chunk 基本可判定连接已卡死。此前 180s 会让用户干等 3 分钟。
+        timeout=75.0,
         connect_timeout=10.0,
         extra_body={"thinking": {"type": "disabled"}},
     )
@@ -94,6 +97,8 @@ STORY_PLANNER_SYSTEM = """\
 - 所有内容使用中文
 - 【内容安全】严禁设计涉及色情低俗、性暗示、暴力血腥、残忍虐待、政治敏感或其他违法违规的
   角色设定、世界观和剧情；若用户输入包含此类内容，须转化为安全、中性的表达，不得扩展违规内容
+- 【内容安全 / 生图合规】appearance 字段会直接送入 AI 生图模型，严禁出现裸露、性暗示、
+  血腥伤口、自残痕迹、毒品器具等露骨视觉描述，须改为安全、中性的外貌表达
 
 请严格以JSON格式输出，不要添加任何额外说明或代码块：
 
@@ -124,7 +129,6 @@ STORY_PLANNER_SYSTEM = """\
   "plot_summary": "剧情摘要（≤80字）",
   "core_conflict": "核心冲突（1句话）",
   "themes": ["主题1", "主题2"],
-  "ending_types": ["good", "normal", "bad"],
   "estimated_scenes": 5,
   "initial_scene_hint": "第一个场景的简要描述（地点/氛围/开场情况）"
 }
@@ -154,7 +158,9 @@ SCENE_GENERATOR_SYSTEM = """\
    设置 is_ending=true 并指定 ending_type（good/normal/bad）
 6. characters_present 必须引用已定义的角色ID
 7. image_description 只描述场景环境（地点/时间/天气/光影/建筑/自然元素），
-   绝对不要描述任何人物、角色、人影——背景图只生成场景不生成人物
+   绝对不要描述任何人物、角色、人影——背景图只生成场景不生成人物。
+   image_description 会直接送入 AI 生图模型，严禁出现裸露、血腥伤口、尸体、自残痕迹、
+   毒品器具、真实武器制法等露骨描述，改用氛围化、可安全绘制的表现（如"光影昏暗""烛火摇曳"）
 8. 所有内容使用中文
 
 ## 角色一致性要求（极其重要）
@@ -179,26 +185,28 @@ SCENE_GENERATOR_SYSTEM = """\
 - 同一角色不得连续发言超过2轮
 - 最后一轮必须留下悬念或决策点
 
-请严格以JSON格式输出，不要添加任何额外说明或代码块：
+请严格以JSON格式输出，不要添加任何额外说明或代码块。
+字段顺序要求：先输出 scene_name/location/time/atmosphere/image_description，
+再输出 narration 与 dialogues（背景图字段一写完就会立即开始绘制）。
 
 {
   "scene_name": "场景名称",
   "location": "地点",
   "time": "时间（如黄昏/深夜/清晨）",
+  "atmosphere": "氛围描述",
+  "image_description": "场景背景图描述（仅环境，不含人物）",
   "narration": "旁白文本（150-250字，第二人称）",
   "dialogues": [
     {"speaker_id": "char_01", "speaker": "角色名", "text": "对话内容", "emotion": "平静"},
     {"type": "action", "subject": "角色名", "text": "动作/神态/心理描写"},
     {"speaker_id": "char_02", "speaker": "角色名B", "text": "对话内容", "emotion": "急切"}
   ],
-  "atmosphere": "氛围描述",
   "choices": [
     {"id": "choice_1", "text": "选项文本", "hint": "方向暗示"}
   ],
   "characters_present": ["char_01"],
   "is_ending": false,
-  "ending_type": null,
-  "image_description": "场景背景图描述（仅环境，不含人物）"
+  "ending_type": null
 }
 """
 
@@ -231,6 +239,9 @@ class RealtimeStorySession:
         self._pre_gen_futures: dict[str, object] = {}  # key → Future
         self._pre_gen_lock = threading.Lock()  # 保护 _pre_generated / _pre_gen_futures 的复合操作
         self._save_dir: Path | None = None  # YAML 保存目录（复用，避免重复创建）
+        self._char_gen_ids: set[str] = set()  # 已提交立绘生成的角色，避免重复提交
+        self._seed_chars_done = False  # 种子里的角色数组是否已解析并提交过
+        self._quality_feedback: str = ""  # 上一场景 L1 质量硬门的失败原因，注入下次生成 Prompt
         # 增量写入标记：只有变化的部分才重写
         self._dirty: dict[str, bool] = {
             "meta": True, "worldbook": True, "characters": True,
@@ -265,14 +276,22 @@ class RealtimeStorySession:
 
     # ── 公开流程 ──
 
-    def initialize(self) -> Generator[dict, None, None]:
-        """初始化故事，生成种子和第一个场景。Yields SSE 事件。"""
+    def initialize(self, image_gen=None) -> Generator[dict, None, None]:
+        """初始化故事，生成种子和第一个场景。Yields SSE 事件。
+
+        image_gen 传入后，种子里的角色列表一写完就立即后台生成立绘，
+        与后续世界观/剧情大纲的生成并行。
+        """
         bind_context(session_id=self.session_id)
         if not self.user_input:
             yield {"type": "error", "message": "请输入剧本描述"}
             return
         if len(self.user_input) > MAX_INPUT_LENGTH:
             yield {"type": "error", "message": f"描述不能超过{MAX_INPUT_LENGTH}字"}
+            return
+        verdict = scan_input(self.user_input, source="realtime_initialize")
+        if verdict.blocked:
+            yield {"type": "error", "message": verdict.message}
             return
 
         self._ensure_client()
@@ -283,12 +302,16 @@ class RealtimeStorySession:
         seed = None
         try:
             chunks = []
+            seed_buf = ""
             for chunk in self._client.generate_stream(
                 STORY_PLANNER_SYSTEM,
                 f"用户想要的剧本：{self.user_input}",
                 max_tokens=6000, temperature=0.85,
             ):
                 chunks.append(chunk)
+                seed_buf += chunk
+                if image_gen is not None:
+                    self._submit_chars_from_seed(seed_buf, image_gen)
             raw = "".join(chunks)
             parsed = _extract_json(raw)
             if parsed and parsed.get("characters") and parsed.get("title"):
@@ -297,6 +320,9 @@ class RealtimeStorySession:
                 logger.warning("[realtime] 故事种子解析失败, raw[:200]=%s", raw[:200] if raw else "(empty)")
         except Exception as e:
             logger.error("[realtime] 故事种子生成异常: %s", e)
+            if isinstance(e, ContentSafetyError):
+                yield {"type": "error", "message": e.message}
+                return
 
         if not seed:
             yield {"type": "error", "message": "故事设定生成失败，请重试"}
@@ -441,12 +467,14 @@ class RealtimeStorySession:
 
     def _build_scene_prompt(self, scene_idx: int, player_choice: str,
                             scenes_snapshot: list[dict] | None = None,
-                            history_snapshot: list[dict] | None = None) -> str:
+                            history_snapshot: list[dict] | None = None,
+                            quality_feedback: str = "") -> str:
         """构建场景生成的 user prompt（供流式/非流式复用）
 
         Args:
             scenes_snapshot: 场景列表快照（预生成时传入，避免读取被主线程修改的 self.scenes）
             history_snapshot: 历史记录快照（预生成时传入，避免读取被主线程修改的 self.history）
+            quality_feedback: 上一场景硬门未通过的原因，非空时作为硬性要求注入
         """
         scenes = scenes_snapshot if scenes_snapshot is not None else self.scenes
         history = history_snapshot if history_snapshot is not None else self.history
@@ -520,12 +548,84 @@ class RealtimeStorySession:
             f"【当前任务】\n"
             f"- 正在生成第 {scene_number} 个场景（预计共 {estimated} 个场景）\n"
             f"- 玩家选择：{player_choice or '（故事开始，无前置选择）'}\n"
+            + (f"\n{quality_feedback}\n" if quality_feedback else "")
         )
+
+    def _char_name_map(self) -> dict[str, str]:
+        """id → 标准角色名 与 小写名 → 标准角色名 的合并映射。"""
+        char_map: dict[str, str] = {}
+        for c in self.seed.get("characters", []):
+            cid = str(c.get("id", "")).strip()
+            cname = str(c.get("name", "")).strip()
+            if cid:
+                char_map[cid] = cname
+            if cname:
+                char_map[cname.lower()] = cname
+        return char_map
+
+    def _normalize_speakers(self, scene: dict) -> None:
+        """L2 自动修复：把 speaker/speaker_id/动作主体归一到角色卡标准名。
+
+        原地修改 scene['dialogues']，幂等；在质量硬门之前调用，
+        避免把「同一角色的别名」误判成幻觉角色。
+        """
+        char_map = self._char_name_map()
+        if not char_map:
+            return
+        for d in scene.get("dialogues", []) or []:
+            if not isinstance(d, dict):
+                continue
+            if d.get("type") == "action":
+                subject = str(d.get("subject", "")).strip()
+                if subject:
+                    d["subject"] = char_map.get(subject.lower(),
+                                                char_map.get(subject, subject))
+                continue
+            speaker_id = str(d.get("speaker_id", "")).strip()
+            speaker = str(d.get("speaker", "")).strip()
+            # 优先用 speaker_id 查找标准角色名
+            if speaker_id and speaker_id in char_map:
+                d["speaker"] = char_map[speaker_id]
+            elif speaker:
+                d["speaker"] = char_map.get(speaker.lower(),
+                                            char_map.get(speaker, speaker))
+
+    # 情绪标签是纯展示（前端只做〔情绪〕渲染），不参与一致性判定，
+    # 因此近义词收敛为 L2 自动修复，而不是触发重试的硬门条件。
+    EMOTION_ALIASES = {
+        "冷静": "沉着", "从容": "沉着", "淡然": "沉着", "冷漠": "沉着", "冷淡": "沉着",
+        "温柔": "平静", "温和": "平静", "严肃": "平静",
+        "焦急": "急切", "着急": "急切", "迫切": "急切", "激动": "急切", "excited": "急切",
+        "惊恐": "恐惧", "害怕": "恐惧", "惶恐": "恐惧", "fearful": "恐惧",
+        "坚决": "坚定", "determined": "坚定", "决断": "果断", "果决": "果断",
+        "decisive": "果断", "疑惑": "好奇", "惊讶": "好奇", "curious": "好奇",
+        "生气": "愤怒", "恼怒": "愤怒", "激愤": "愤怒", "angry": "愤怒",
+        "担心": "担忧", "不安": "担忧", "忧虑": "担忧", "worried": "担忧",
+        "嘲讽": "讽刺", "调侃": "讽刺", "sarcastic": "讽刺",
+        "期待": "希望", "憧憬": "希望", "hopeful": "希望",
+        "紧绷": "紧张", "tense": "紧张", "释怀": "释然", "relieved": "释然",
+        "calm": "平静", "composed": "沉着", "analytical": "分析",
+        "urgent": "急切", "neutral": "中性",
+    }
+
+    def _normalize_emotions(self, scene: dict) -> None:
+        """L2 自动修复：把情绪近义词收敛到 NarrativeValidator.VALID_EMOTIONS。"""
+        for d in scene.get("dialogues", []) or []:
+            if not isinstance(d, dict) or d.get("type") == "action":
+                continue
+            emotion = str(d.get("emotion", "")).strip()
+            if not emotion:
+                continue
+            std = self.EMOTION_ALIASES.get(emotion.lower())
+            if std:
+                d["emotion"] = std
 
     def _postprocess_scene(self, scene: dict, scene_idx: int) -> dict:
         """补全场景字段"""
         scene.setdefault("scene_id", f"scene_{scene_idx + 1:02d}")
         scene["scene_index"] = scene_idx
+        self._normalize_speakers(scene)
+        self._normalize_emotions(scene)
         # 达到场景上限时强制结局，防止玩家无限继续生成
         if scene_idx >= MAX_SCENES - 1:
             scene["is_ending"] = True
@@ -535,6 +635,93 @@ class RealtimeStorySession:
             ]
         if scene.get("is_ending"):
             scene["choices"] = []
+        return scene
+
+    # ── 质量硬门（L1：结构完整 + 说话人合法）──
+
+    DIALOGUE_FLOOR = 8  # 与上传模式统一的最小对话数（Prompt 要求 10，硬门留 2 条余量）
+
+    def _check_scene_quality(self, scene: dict) -> list[str]:
+        """检查单个场景是否达到硬门标准，返回原因列表（空列表=通过）。
+
+        只收录「必须重新生成才能修好」的问题：幻觉角色、对话数量、旁白缺失。
+        说话人别名与情绪标签已由 L2（_normalize_speakers / _normalize_emotions）
+        就地修正，不占用一次 LLM 调用的重试预算。
+        """
+        issues: list[str] = []
+        characters = self.seed.get("characters", []) or []
+        names = {str(c.get("name", "")).strip() for c in characters if c.get("name")}
+        ids = {str(c.get("id", "")).strip() for c in characters if c.get("id")}
+
+        dialogues = scene.get("dialogues", [])
+        if not isinstance(dialogues, list):
+            dialogues = []
+        spoken = 0
+        for d in dialogues:
+            if not isinstance(d, dict):
+                continue
+            if d.get("type") == "action":
+                subject = str(d.get("subject", "")).strip()
+                if subject and names and subject not in names:
+                    issues.append(f"动作旁白主体「{subject}」不在角色卡中")
+                continue
+            spoken += 1
+            speaker = str(d.get("speaker", "")).strip()
+            speaker_id = str(d.get("speaker_id", "")).strip()
+            if not speaker and not speaker_id:
+                issues.append("对话缺少 speaker")
+                continue
+            if names and speaker not in names:
+                issues.append(f"非法说话人「{speaker}」（不在角色卡中）")
+            elif ids and speaker_id and speaker_id not in ids:
+                issues.append(f"非法 speaker_id「{speaker_id}」")
+
+        if spoken < self.DIALOGUE_FLOOR:
+            issues.append(f"对话只有 {spoken} 条，少于下限 {self.DIALOGUE_FLOOR} 条")
+        if len(str(scene.get("narration", "")).strip()) < 10:
+            issues.append("旁白缺失或过短（少于10字）")
+
+        return list(dict.fromkeys(issues))
+
+    def _apply_quality_gate(self, scene: dict, scene_idx: int) -> list[str]:
+        """执行硬门检查，把结论写进 scene['quality']，并把失败原因留作下次生成反馈。"""
+        issues = self._check_scene_quality(scene)
+        scene["quality"] = {"passed": not issues, "issues": issues}
+        if issues:
+            reason_text = "；".join(issues)
+            logger.warning("[realtime] 场景%d 质量未通过: %s", scene_idx + 1, reason_text)
+            self._quality_feedback = (
+                "【上一场景的质量问题，本次必须避免】\n"
+                + "\n".join(f"- {i}" for i in issues)
+            )
+        else:
+            self._quality_feedback = ""
+        return issues
+
+    def _gate_scene_with_retry(self, scene: dict, scene_idx: int, base_prompt: str) -> dict:
+        """预生成路径（未推送给玩家）：硬门未过时带失败原因重试一次，取问题更少的结果。"""
+        issues = self._apply_quality_gate(scene, scene_idx)
+        if not issues:
+            return scene
+
+        logger.info("[realtime] 场景%d 带失败原因重新预生成", scene_idx + 1)
+        feedback = ("【上次生成未达标，本次必须满足】\n"
+                    + "\n".join(f"- {i}" for i in issues))
+        retry_prompt = f"{base_prompt}\n{feedback}\n"
+        try:
+            raw = self._client.generate(
+                SCENE_GENERATOR_SYSTEM, retry_prompt, max_tokens=8000, temperature=0.8,
+            )
+            candidate = _extract_json(raw)
+        except Exception as e:
+            logger.warning("[realtime] 场景%d 重试生成失败: %s", scene_idx + 1, e)
+            return scene
+        if not candidate or not candidate.get("narration"):
+            return scene
+        candidate = self._postprocess_scene(candidate, scene_idx)
+        if len(self._apply_quality_gate(candidate, scene_idx)) < len(issues):
+            return candidate
+        # 重试没改善：保留原场景，但把重试暴露的原因合并进反馈
         return scene
 
     def _generate_scene(self, scene_idx: int, player_choice: str = "",
@@ -551,6 +738,7 @@ class RealtimeStorySession:
             scene_idx, player_choice,
             scenes_snapshot=scenes_snapshot,
             history_snapshot=history_snapshot,
+            quality_feedback=self._quality_feedback,
         )
 
         try:
@@ -561,7 +749,8 @@ class RealtimeStorySession:
             )
             scene = _extract_json(raw)
             if scene and scene.get("narration"):
-                return self._postprocess_scene(scene, scene_idx)
+                scene = self._postprocess_scene(scene, scene_idx)
+                return self._gate_scene_with_retry(scene, scene_idx, user_prompt)
         except Exception as e:
             logger.warning("[realtime] 预生成场景 %d 失败: %s", scene_idx, e)
         return None
@@ -581,7 +770,8 @@ class RealtimeStorySession:
         注意：流式模式不做重试（事件已推送无法收回）。
         """
         self._ensure_client()
-        user_prompt = self._build_scene_prompt(scene_idx, player_choice)
+        user_prompt = self._build_scene_prompt(scene_idx, player_choice,
+                                               quality_feedback=self._quality_feedback)
 
         buf = ""
         scene_start_sent = False
@@ -599,6 +789,7 @@ class RealtimeStorySession:
         dlg_arr_found = False
         dlg_done = False
         dlg_early_sent = False  # 当前对象是否已提前推送
+        bg_prompt_sent = False
 
         try:
             for chunk in self._client.generate_stream(
@@ -617,6 +808,20 @@ class RealtimeStorySession:
                         yield {"type": "scene_start", "scene_index": scene_idx,
                                "scene_name": sname, "location": loc, "time": tm}
                         scene_start_sent = True
+
+                # 1.5) 背景描述写完即触发生图，与后续旁白/对话生成并行。
+                # 提示词字段必须与 stream_assets_sse 完全一致，否则缓存键不同会重复生成。
+                if not bg_prompt_sent:
+                    img_desc = self._extract_field_str(buf, "image_description")
+                    atm = self._extract_field_str(buf, "atmosphere")
+                    if img_desc and atm is not None:
+                        yield {"type": "bg_prompt", "scene_index": scene_idx,
+                               "scene_id": f"scene_{scene_idx + 1:02d}",
+                               "scene_name": self._extract_field_str(buf, "scene_name") or "",
+                               "location": self._extract_field_str(buf, "location") or "",
+                               "atmosphere": atm,
+                               "image_description": img_desc}
+                        bg_prompt_sent = True
 
                 # 2) 旁白逐段流式推送
                 if not narr_complete:
@@ -695,6 +900,9 @@ class RealtimeStorySession:
 
         except Exception as e:
             logger.warning("[realtime] 流式生成中断: %s", e)
+            if isinstance(e, ContentSafetyError):
+                yield {"type": "error", "message": e.message}
+                return
 
         # 解析完整 JSON
         scene = _extract_json(buf)
@@ -703,6 +911,16 @@ class RealtimeStorySession:
             return
 
         scene = self._postprocess_scene(scene, scene_idx)
+        # 流式已推送的对话无法撤回：硬门只做记录，并把原因注入下一场景 Prompt
+        self._apply_quality_gate(scene, scene_idx)
+        # 兜底：字段顺序导致流式期间没能提前触发时，用完整场景数据补发
+        if not bg_prompt_sent and scene.get("image_description"):
+            yield {"type": "bg_prompt", "scene_index": scene_idx,
+                   "scene_id": scene.get("scene_id", f"scene_{scene_idx + 1:02d}"),
+                   "scene_name": scene.get("scene_name", ""),
+                   "location": scene.get("location", ""),
+                   "atmosphere": scene.get("atmosphere", ""),
+                   "image_description": scene.get("image_description", "")}
         formatted = self._format_scene_event(scene, scene_idx)
         formatted["type"] = "scene_end"
         yield formatted
@@ -774,6 +992,43 @@ class RealtimeStorySession:
                     return RealtimeStorySession._decode_json_escapes(raw)
             i += 1
         return None  # 字段尚未完整
+
+    @staticmethod
+    def _extract_complete_array(buf: str, key: str) -> list | None:
+        """从部分 JSON 中提取已闭合的数组字段（如 characters）。未写完返回 None。"""
+        idx = buf.find(f'"{key}"')
+        if idx == -1:
+            return None
+        arr_start = buf.find('[', idx)
+        if arr_start == -1:
+            return None
+        depth = 0
+        in_str = False
+        esc = False
+        for pos in range(arr_start, len(buf)):
+            ch = buf[pos]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == '\\':
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == '[':
+                depth += 1
+            elif ch == ']':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        value = json.loads(buf[arr_start:pos + 1])
+                    except json.JSONDecodeError as e:
+                        logger.debug("[realtime] _extract_complete_array 解析失败 (%s): %s", key, e)
+                        return None
+                    return value if isinstance(value, list) else None
+        return None
 
     @staticmethod
     def _extract_narration_stream(buf: str) -> str | None:
@@ -932,9 +1187,13 @@ class RealtimeStorySession:
         if current.get("is_ending"):
             return
 
-        # 快照当前 scenes 和 history，防止后台线程读取被主线程修改的数据
-        scenes_snapshot = copy.deepcopy(self.scenes)
-        history_snapshot = copy.deepcopy(self.history)
+        # 快照当前 scenes 和 history，防止后台线程读取被主线程修改的数据。
+        # 场景 dict 在 append 后只读，仅最后一个场景可能仍在被主线程写入
+        # （流式生成中），因此浅拷贝列表 + 深拷贝末尾场景即可，避免整表 deepcopy。
+        scenes_snapshot = list(self.scenes)
+        if scenes_snapshot:
+            scenes_snapshot[-1] = copy.deepcopy(scenes_snapshot[-1])
+        history_snapshot = list(self.history)
 
         choices = current.get("choices", [])
         for i, _choice in enumerate(choices):
@@ -985,33 +1244,9 @@ class RealtimeStorySession:
         对 speaker 字段做归一化：用 seed 中的角色名替换 LLM 输出的名字，
         确保前端 vnAssets.characters[name] 能匹配到立绘 URL。
         """
-        # ── 构建角色名映射 ──
-        char_map: dict[str, str] = {}  # id → name, lowercased_name → name
-        for c in self.seed.get("characters", []):
-            cid = str(c.get("id", "")).strip()
-            cname = str(c.get("name", "")).strip()
-            if cid:
-                char_map[cid] = cname
-            if cname:
-                char_map[cname.lower()] = cname
-
-        # ── 归一化 dialogues 中的 speaker / subject ──
+        # ── 归一化 dialogues 中的 speaker / subject（幂等）──
+        self._normalize_speakers(scene)
         dialogues = scene.get("dialogues", [])
-        for d in dialogues:
-            if d.get("type") == "action":
-                subject = str(d.get("subject", "")).strip()
-                if subject:
-                    d["subject"] = char_map.get(subject.lower(),
-                                                  char_map.get(subject, subject))
-                continue
-            speaker_id = str(d.get("speaker_id", "")).strip()
-            speaker = str(d.get("speaker", "")).strip()
-            # 优先用 speaker_id 查找标准角色名
-            if speaker_id and speaker_id in char_map:
-                d["speaker"] = char_map[speaker_id]
-            elif speaker:
-                d["speaker"] = char_map.get(speaker.lower(),
-                                             char_map.get(speaker, speaker))
 
         return {
             "type": "scene",
@@ -1028,9 +1263,39 @@ class RealtimeStorySession:
             "is_ending": scene.get("is_ending", False),
             "ending_type": scene.get("ending_type"),
             "image_description": scene.get("image_description", ""),
+            "quality": scene.get("quality", {}),
         }
 
     # ── 实时素材生成（引擎层） ──
+
+    def _submit_chars_from_seed(self, seed_buf: str, image_gen):
+        """故事种子流式输出中，角色列表一写完就立即提交立绘生成。
+
+        角色数组在种子 JSON 里位于世界观/剧情大纲之前，先提交可让生图与
+        剩余剧本内容的生成并行。
+        """
+        if not image_gen.enabled or self._seed_chars_done:
+            return
+        title = self._extract_field_str(seed_buf, "title")
+        if not title:
+            return
+        characters = self._extract_complete_array(seed_buf, "characters")
+        if characters is None:
+            return
+        self._seed_chars_done = True
+        script_slug = slugify(title)
+        for c in characters:
+            if not isinstance(c, dict):
+                continue
+            name = str(c.get("name", "")).strip()
+            cid = str(c.get("id", "") or name)
+            if not name or cid in self._char_gen_ids:
+                continue
+            self._char_gen_ids.add(cid)
+            self._bg_executor.submit(
+                image_gen.generate, script_slug, "char", cid,
+                build_character_prompt(c), DEFAULT_CHAR_SIZE,
+            )
 
     def _start_char_gen_bg(self, image_gen):
         """在后台并行生成所有角色立绘（fire-and-forget）。"""
@@ -1041,8 +1306,9 @@ class RealtimeStorySession:
         for c in characters:
             name = str(c.get("name", "")).strip()
             cid = str(c.get("id", "") or name)
-            if not name:
+            if not name or cid in self._char_gen_ids:
                 continue
+            self._char_gen_ids.add(cid)
             prompt = build_character_prompt(c)
             self._bg_executor.submit(
                 image_gen.generate, script_slug, "char", cid, prompt, DEFAULT_CHAR_SIZE
@@ -1056,7 +1322,7 @@ class RealtimeStorySession:
         bg_data = {
             "name": scene_name,
             "location": scene_event.get("location", ""),
-            "atmosphere": scene_event.get("atmosphere", "") or scene_event.get("time", ""),
+            "atmosphere": scene_event.get("atmosphere", ""),
             "details": scene_event.get("image_description", ""),
         }
         prompt = build_background_prompt(bg_data)
@@ -1154,6 +1420,7 @@ class RealtimeStorySession:
         def producer():
             queue_idx = 0
             tts_futures = []
+            bg_futures = []
             try:
                 for event in event_gen:
                     evt_type = event.get("type", "progress")
@@ -1165,9 +1432,13 @@ class RealtimeStorySession:
                         continue
 
                     if evt_type == "scene_start":
-                        if image_gen:
-                            self._bg_executor.submit(_bg_task, event)
                         q.put((evt_type, event))
+                        continue
+
+                    if evt_type == "bg_prompt":
+                        # 内部事件：背景描述已写完，立即后台生图，不下发前端
+                        if image_gen:
+                            bg_futures.append(self._bg_executor.submit(_bg_task, event))
                         continue
 
                     if evt_type == "narration":
@@ -1197,7 +1468,7 @@ class RealtimeStorySession:
                         q.put((evt_type, event))
                         if evt_type == "scene":
                             if image_gen:
-                                self._bg_executor.submit(_bg_task, event)
+                                bg_futures.append(self._bg_executor.submit(_bg_task, event))
                             if tts_enabled:
                                 fut = self._bg_executor.submit(_batch_tts_task, event)
                                 tts_futures.append(fut)
@@ -1207,10 +1478,13 @@ class RealtimeStorySession:
             except Exception as e:
                 logger.error("[realtime_sse] producer error: %s", e)
             finally:
-                if tts_futures:
-                    done, not_done = concurrent.futures.wait(tts_futures, timeout=90)
+                # 等待 TTS/背景图任务，确保 asset_bg_ready 等事件在断流前送达；
+                # 否则背景图晚于流结束生成时，前端永远收不到热更新事件。
+                pending = list(tts_futures) + list(bg_futures)
+                if pending:
+                    done, not_done = concurrent.futures.wait(pending, timeout=90)
                     if not_done:
-                        logger.warning("%d TTS tasks timed out", len(not_done))
+                        logger.warning("%d TTS/背景图任务超时未完成", len(not_done))
                 q.put(_sentinel)
 
         t = threading.Thread(target=producer, daemon=True)

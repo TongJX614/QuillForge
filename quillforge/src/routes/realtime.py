@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from content_guard import scan_input
 from realtime_engine import RealtimeStorySession
 from dependencies import realtime_sessions, get_image_generator, get_tts_generator
 from logger import get_logger
@@ -44,6 +45,9 @@ async def realtime_start(request: Request, body: RealtimeStartRequest):
         raise HTTPException(400, "请输入剧本描述")
     if len(user_prompt) > 150:
         raise HTTPException(400, f"描述不能超过150字（当前{len(user_prompt)}字）")
+    verdict = scan_input(user_prompt, source="realtime_start")
+    if verdict.blocked:
+        raise HTTPException(400, verdict.message)
 
     session = RealtimeStorySession(user_prompt)
     realtime_sessions[session.session_id] = session
@@ -52,7 +56,7 @@ async def realtime_start(request: Request, body: RealtimeStartRequest):
 
     return StreamingResponse(
         session.stream_realtime_sse(
-            session.initialize(),
+            session.initialize(image_gen),
             image_gen=image_gen,
             tts_gen=get_tts_generator(),
             on_story_seed=lambda: session._start_char_gen_bg(image_gen),

@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 道具箱底的戏票
+  description: ''
+  options:
+  - id: choice_1
+    text: 把票收进口袋，先带两人去财务室旧档案柜核对存根
+    leads_to_ending: null
+  - id: choice_2
+    text: 追问周野十年前看到的那个人影，让他仔细回忆
+    leads_to_ending: null
+  - id: choice_3
+    text: 让林知夏先拍照存档，自己则去检查箱子周围是否还有别的遗留物
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 财务室的存根
+  description: ''
+  options:
+  - id: choice_1
+    text: 让周野立刻回家取那枚铜纽扣，当面对质
+    leads_to_ending: null
+  - id: choice_2
+    text: 先问清那套戏服如今在谁手上，从衣物追人
+    leads_to_ending: null
+  - id: choice_3
+    text: 暂时按下此事，先按原计划排戏，观察各人反应
+    leads_to_ending: null

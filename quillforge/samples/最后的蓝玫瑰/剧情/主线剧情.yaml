@@ -1,0 +1,21 @@
+main_plot:
+  summary: 火星温室里长出一朵地球已灭绝的蓝玫瑰，植物学家林昭必须在资源主任销毁它之前，查清它的来历，并决定是否赌上一切保护这个奇迹。
+  themes:
+  - 生命的韧性
+  - 规则与人性
+  - 记忆与传承
+  - 奇迹与科学
+  core_conflict: 林昭想保护蓝玫瑰并追查真相，而殖民地规则要求立即销毁未经登记的样本，同时她必须面对母亲留下的秘密。
+  stages:
+  - name: 意外的蓝色
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 取样与倒计时
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

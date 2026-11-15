@@ -48,7 +48,8 @@ quillforge/
 │   ├── system_prompt_dynamic.md    # 动态系统提示词（叙事风格/世界书/概要等）
 │   ├── narration_v2.md             # Stage 2: 旁白生成模板
 │   ├── dialogue_v2.md              # Stage 3: 对话生成模板
-│   └── choices_v2.md               # Stage 4: 选择分支模板
+│   ├── choices_v2.md               # Stage 4: 选择分支模板
+│   └── personality_judge.md        # Stage 5: 性格一致性 LLM 评审模板
 ├── config/                         # 配置文件
 │   ├── quillforge_config.yaml      # Harness 运行参数（LLM/阶段/验证阈值）
 │   ├── character_card_template.yaml
@@ -86,7 +87,8 @@ quillforge/
 │   ├── schemas.py                  # 数据模型（dataclass 定义所有 I/O 结构）
 │   ├── llm_client.py               # 统一 LLM 客户端（OpenAI 兼容格式）
 │   ├── config_manager.py           # 配置管理（环境变量 + YAML）
-│   ├── validator.py                # 叙事验证器（8 项检查）
+│   ├── validator.py                # 叙事验证器（8 项检查，两种模式的标准来源）
+│   ├── content_guard.py            # 内容安全（入口拦截 / 生图提示词软化 / 审核报错翻译）
 │   ├── extra_context.py            # 额外上下文（ExtraContext 类型安全封装）
 │   ├── image_gen.py                # 生图模块（立绘/背景，磁盘缓存 + 按需生图）
 │   ├── tts_gen.py                  # TTS 语音合成（音色克隆 + 预置音色回退）

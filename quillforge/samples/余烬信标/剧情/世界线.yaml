@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 前消防员林远护送医学生陈小满和无线电工老周穿越废墟寻找余烬营地，途中遭遇变异犬灰狼和感染者群，三人必须在信任与生存之间做出抉择。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 半句人声
+  - scene_id: scene_02
+    sequence: 2
+    description: 静默的代价
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

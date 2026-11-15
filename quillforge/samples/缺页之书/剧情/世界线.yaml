@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 雨夜，图书馆管理员林知夏遇到一本会说话的古书，它丢失了三页章节，请求她帮忙找回。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 雨夜初语
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

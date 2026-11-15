@@ -1,0 +1,20 @@
+main_plot:
+  summary: 现代学者林向远重生为红军侦察参谋，带着未来知识试图帮助战友避开险境，却在一次次生死抉择中明白：历史不能靠'预知'拯救，只能靠每一个人的信念与牺牲。
+  themes:
+  - 信念与牺牲
+  - 历史与个人
+  - 信任与成长
+  core_conflict: 林向远想用未来知识改变战友命运，但每次干预都可能引发不可预料的连锁反应，他必须在'说与不说'、'救与不救'之间做出痛苦抉择。
+  stages:
+  - name: 雨夜担架
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 岭上枪声
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

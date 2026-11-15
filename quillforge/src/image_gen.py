@@ -22,6 +22,8 @@ from pathlib import Path
 import logging
 logger = logging.getLogger(__name__)
 
+from content_guard import moderation_error_or_none, soften_image_prompt
+
 # 加载项目 .env（与 quillforge 保持一致：工作区根目录 + quillforge 目录）
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent  # quillforge
 try:
@@ -86,10 +88,12 @@ STYLE_SUFFIX_BG = (
 )
 
 
-# ── 全局图片生成请求交错 ──
-# 避免多线程同时发出请求触发 API IPM 限制，每个请求自动顺延 _IMG_STAGGER_SEC 秒
+# ── 全局图片生成请求串行化 ──
+# 智谱免费档实测同一时刻只允许 1 张在生成（并发即 429），因此所有生图调用
+# 串行排队，并保证相邻两次调用至少间隔 _IMG_STAGGER_SEC 秒。
 _IMG_STAGGER_SEC = float(os.environ.get("IMAGE_STAGGER_SEC", "1.5"))
 _img_stagger_lock = threading.Lock()
+_img_call_lock = threading.Lock()  # 保证同一时刻只有一个 images.generate 在飞
 _img_next_slot = 0.0
 
 
@@ -130,14 +134,16 @@ def build_character_prompt(char: dict) -> str:
     head = "，".join(parts)
     personality_str = f"。性格：{personality}" if personality else ""
     if is_human:
-        return f"{head}{personality_str}。外貌：{appearance}{STYLE_SUFFIX_CHAR}"
+        return soften_image_prompt(f"{head}{personality_str}。外貌：{appearance}{STYLE_SUFFIX_CHAR}")
     # 非人类形态：强调物种本体，禁止拟人化身体
     species_note = (
         f"。【重要】该角色的形态是{species}，必须按{species}的真实形态绘制"
         f"（完整的动物/生物身体结构，四足着地或符合其物种的姿态），"
         f"严禁画成人类身体、人形或拟人化站立"
     )
-    return f"{head}{personality_str}{species_note}。外貌：{appearance}{STYLE_SUFFIX_CHAR_NONHUMAN}"
+    return soften_image_prompt(
+        f"{head}{personality_str}{species_note}。外貌：{appearance}{STYLE_SUFFIX_CHAR_NONHUMAN}"
+    )
 
 
 def build_background_prompt(scene: dict) -> str:
@@ -156,7 +162,7 @@ def build_background_prompt(scene: dict) -> str:
         f"画面：{details}" if details else "",
     ]
     head = "，".join(p for p in parts if p)
-    return f"{head}{STYLE_SUFFIX_BG}"
+    return soften_image_prompt(f"{head}{STYLE_SUFFIX_BG}")
 
 
 def _chroma_key(img):
@@ -241,6 +247,9 @@ _rembg_session = None
 _rembg_session_lock = threading.Lock()
 # 推理锁：Numba workqueue 层不支持多线程并发调用，必须串行化 rembg 推理
 _rembg_infer_lock = threading.Lock()
+# alpha matting 极慢（erode 滤波在 CPU 上每张数秒）且与绿幕管线（色度键+despill+defringe）功能重叠，
+# 默认关闭；如需开启设置环境变量 IMAGE_ALPHA_MATTING=1
+_ALPHA_MATTING = os.environ.get("IMAGE_ALPHA_MATTING", "0").strip().lower() in ("1", "true", "yes")
 
 def _get_rembg_session():
     """lazy 初始化 rembg session（线程安全单例）"""
@@ -258,7 +267,7 @@ def _get_rembg_session():
 
 def remove_background(image_path: Path) -> bool:
     """使用 rembg 去除图片背景（AI 抠图），将结果覆盖写回原文件（PNG 透明通道）。
-    使用 isnet-anime 模型 + alpha_matting + green_despill + defringe。
+    使用 isnet-anime 模型 + green_despill + defringe（alpha matting 默认关闭，见 _ALPHA_MATTING）。
     成功返回 True，失败返回 False（保留原图不破坏）。"""
     try:
         from rembg import remove
@@ -266,16 +275,16 @@ def remove_background(image_path: Path) -> bool:
 
         session = _get_rembg_session()
         img = Image.open(image_path)
-        with _rembg_infer_lock:  # 串行化推理，防止 Numba 并发崩溃
-            result = remove(
-                img,
-                session=session,
-                post_process_mask=True,
+        rembg_kwargs = {"session": session, "post_process_mask": True}
+        if _ALPHA_MATTING:
+            rembg_kwargs.update(
                 alpha_matting=True,
                 alpha_matting_foreground_threshold=240,
                 alpha_matting_background_threshold=10,
                 alpha_matting_erode_size=15,
             )
+        with _rembg_infer_lock:  # 串行化推理，防止 Numba 并发崩溃
+            result = remove(img, **rembg_kwargs)
         result = result.convert("RGBA")
         # 1) 色度键：将误判为前景的纯绿色像素直接透明化
         result = _chroma_key(result)
@@ -293,7 +302,11 @@ def remove_background(image_path: Path) -> bool:
 class ImageGenerator:
     """OpenAI 兼容的生图客户端（带磁盘缓存与无 key 回退）"""
 
+    # 402 余额不足熔断：触发后 10 分钟内跳过所有生图请求（重试无意义）
+    _PERMANENT_FAIL_COOLDOWN = 600.0
+
     def __init__(self):
+        self._permanent_fail_until = 0.0
         _settings = _get_settings_safe()
         self.api_key = (
             _settings.image_api_key.strip() if _settings
@@ -407,8 +420,9 @@ class ImageGenerator:
         if not self.enabled:
             return None
 
-        # 交错延迟：避免多线程同时请求触发 API IPM 限制
-        _img_stagger()
+        # 熔断中：账户余额不足等永久性错误，跳过请求
+        if time.time() < self._permanent_fail_until:
+            return None
 
         kwargs = dict(model=self.model, prompt=prompt, size=size, n=1)
         if self.quality:
@@ -430,19 +444,25 @@ class ImageGenerator:
         last_err = None
         for attempt in range(1, max_attempts + 1):
             try:
-                resp = self.client.images.generate(**kwargs)
-                item = resp.data[0]
-                b64 = getattr(item, "b64_json", None)
-                url = getattr(item, "url", None)
-                if b64:
-                    path.write_bytes(base64.b64decode(b64))
-                elif url:
-                    # 使用 urlopen + timeout 替代 urlretrieve（后者无超时参数，可能永久挂起）
-                    with urllib.request.urlopen(url, timeout=90) as resp_dl:
-                        path.write_bytes(resp_dl.read())
-                else:
-                    print(f"[image_gen] {kind}/{asset_id}: 响应中既无 b64_json 也无 url", flush=True)
-                    return None
+                # 串行调用：并发只会让免费额度互相触发 429
+                with _img_call_lock:
+                    _img_stagger()
+                    # 排队期间同素材可能已被预生成任务写完，直接复用，避免重复调用 API
+                    if path.exists() and path.stat().st_size > 0:
+                        return rel_url
+                    resp = self.client.images.generate(**kwargs)
+                    item = resp.data[0]
+                    b64 = getattr(item, "b64_json", None)
+                    url = getattr(item, "url", None)
+                    if b64:
+                        path.write_bytes(base64.b64decode(b64))
+                    elif url:
+                        # 使用 urlopen + timeout 替代 urlretrieve（后者无超时参数，可能永久挂起）
+                        with urllib.request.urlopen(url, timeout=90) as resp_dl:
+                            path.write_bytes(resp_dl.read())
+                    else:
+                        print(f"[image_gen] {kind}/{asset_id}: 响应中既无 b64_json 也无 url", flush=True)
+                        return None
 
                 # 角色立绘：AI 去背景（白底 → 透明）
                 if kind == "char" and _REMOVE_BG_ENABLED:
@@ -459,13 +479,36 @@ class ImageGenerator:
                     time.sleep(wait)
                     continue
             except Exception as e:
-                # 429 速率限制：指数退避重试
+                # 内容审核拒绝：同一提示词重试必然再次被拦，直接放弃并回退占位图
+                safety = moderation_error_or_none(e)
+                if safety is not None:
+                    last_err = safety
+                    print(f"[image_gen] {kind}/{asset_id} 提示词被内容审核拦截，回退占位图", flush=True)
+                    break
+                # 429 速率限制：指数退避重试；但「余额不足」类 429 是永久性错误
                 if RateLimitError and isinstance(e, RateLimitError) and attempt < max_attempts:
+                    if "余额不足" in str(e) or "insufficient" in str(e).lower():
+                        self._permanent_fail_until = time.time() + self._PERMANENT_FAIL_COOLDOWN
+                        print(f"[image_gen] 检测到余额不足（429），{self._PERMANENT_FAIL_COOLDOWN:.0f}s 内跳过所有生图请求", flush=True)
+                        last_err = e
+                        break
+                    # 等待期间其他线程可能已触发 402 熔断，不再重试
+                    if time.time() >= self._permanent_fail_until:
+                        last_err = e
+                        wait = attempt * 15  # 15s, 30s, 45s
+                        print(f"[image_gen] {kind}/{asset_id} 触发速率限制，{wait}s 后重试({attempt}/{max_attempts})", flush=True)
+                        time.sleep(wait)
+                        continue
                     last_err = e
-                    wait = attempt * 15  # 15s, 30s, 45s
-                    print(f"[image_gen] {kind}/{asset_id} 触发速率限制，{wait}s 后重试({attempt}/{max_attempts})", flush=True)
-                    time.sleep(wait)
-                    continue
+                    break
+                # 401/402/403 等永久性错误（鉴权/余额/权限）重试无意义，立即放弃
+                status = getattr(e, "status_code", None)
+                if status in (401, 402, 403):
+                    if status == 402:
+                        self._permanent_fail_until = time.time() + self._PERMANENT_FAIL_COOLDOWN
+                        print(f"[image_gen] 检测到 402 余额不足，{self._PERMANENT_FAIL_COOLDOWN:.0f}s 内跳过所有生图请求", flush=True)
+                    last_err = e
+                    break
                 last_err = e
                 break
 

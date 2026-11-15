@@ -18,9 +18,9 @@ Fixture Setup → Stage 1 → [重试循环: Stage 2 → 3 → 4 → 5] → Fall
 |------|------|------|----------|
 | Stage 1 | Context Assembly | 组装上下文（角色、世界线、场景） | 无 |
 | Stage 2 | Narrative Anchoring | 生成旁白/叙事文本（≤250字） | 是 |
-| Stage 3 | Dialogue Generation | 生成角色对话（3-15轮） | 是 |
-| Stage 4 | Choice Branching | 生成分支选项（2-4个） | 是 |
-| Stage 5 | Validation Gate | 验证质量（性格匹配、主线符合度） | 无 |
+| Stage 3 | Dialogue Generation | 生成角色对话（3-15轮），并在同一次调用末尾附带产出玩家选项 | 是 |
+| Stage 4 | Choice Branching | 复用 Stage 3 附带选项；缺失时回退独立 LLM 调用；剧本预设选项直接跳过 | 视情况 |
+| Stage 5 | Validation Gate | 验证质量（性格匹配、主线符合度），失败原因反馈给下一轮重试 Prompt | 视情况（性格词表零命中时追加 1 次 LLM 评审） |
 
 关键设计原则：
 - **Harness 是薄编排器**：不含业务逻辑，只负责组装组件和驱动流程
@@ -28,6 +28,8 @@ Fixture Setup → Stage 1 → [重试循环: Stage 2 → 3 → 4 → 5] → Fall
 - **Observer 模式**：日志、SSE 推送、指标收集通过观察者解耦
 - **三层 Fallback**：对话不足时触发保底生成（LLM 重试 → 模板生成 → 硬编码兜底）
 - **Fixture 系统**：`PreparedContext` 封装执行前的上下文准备
+- **两种模式同一套质量标准**：上传模式走 Stage 5（`NarrativeValidator`），实时模式走 L1 硬门（`realtime_engine._check_scene_quality`）；说话人合法性、最小对话数、旁白完整度两侧同口径，别名说话人与情绪近义词先由 L2 就地修正，不占用重试预算
+- **内容安全三层拦截**：`content_guard.py` 在入口拦截（HTTP 400 + 分类名）、在生图提示词上做视觉软化、并把服务商审核报错翻译成中文提示
 
 ## 目录职责
 
@@ -68,6 +70,7 @@ quillforge/
 │   ├── llm_client.py        # 统一 LLM 客户端（OpenAI 兼容格式）
 │   ├── config_manager.py    # 配置管理（环境变量 + YAML）
 │   ├── validator.py         # 叙事验证器（NarrativeValidator）
+│   ├── content_guard.py     # 内容安全（入口拦截 / 生图提示词软化 / 审核报错翻译）
 │   ├── extra_context.py     # 额外上下文（ExtraContext 类型安全封装）
 │   ├── image_gen.py         # 图片生成（立绘/背景）
 │   ├── tts_gen.py           # TTS 语音合成
@@ -85,7 +88,8 @@ quillforge/
 │   ├── system_prompt_v2.md
 │   ├── narration_v2.md
 │   ├── dialogue_v2.md
-│   └── choices_v2.md
+│   ├── choices_v2.md
+│   └── personality_judge.md  # Stage 5 性格评审（LLM-as-judge）
 │
 └── tests/                   # 测试
 ```
@@ -187,12 +191,21 @@ Stage 5 (`ValidationStage`) 通过 `NarrativeValidator.validate_all()` 执行 8 
 | `dialogue_count` | high | 对话轮数不在 `[min, max]` 范围内（默认 3-15） |
 | `character_consistency` | critical | 对话 speaker 不在角色卡名称集合中（LLM 幻觉出不存在的角色） |
 | `consecutive_speaker` | medium | 同一角色连续发言 ≥ 3 轮（不阻塞，但影响质量评分） |
-| `personality_match` | medium | 对话关键词与角色性格描述偏离（启发式评分 < 0.5） |
+| `personality_match` | high | 对话与角色性格描述偏离（启发式得分 < 0.5）；词表零命中时改用 `prompts/personality_judge.md` 的 LLM 评审得分，避免词表漏判被静默放过 |
 | `worldline_adherence` | high | 生成内容未命中当前/下一世界线节点关键词（偏离主线） |
 | `choice_diversity` | medium | 选项文本高度雷同或 impact 类型单一 |
 | `choice_validity` | high | 选项 impact 不在合法集合 `{advance, advance_risky, stay_current, side_branch}` 中 |
 
-**排查步骤**：查看日志中 `[FAIL] 验证未通过: [...]` 列出的失败检查名，对照上表定位原因。若频繁触发 `worldline_adherence`，检查 `世界书.md` 和 `主线剧情.yaml` 中节点名称是否过于抽象。
+**排查步骤**：查看日志中 `[FAIL] 验证未通过: [...]` 列出的失败项名称，对照上表定位原因。若频繁触发 `worldline_adherence`，检查 `世界书.md` 和 `主线剧情.yaml` 中节点名称是否过于抽象。若频繁触发 `personality_match` 且日志显示「LLM 评审得分」，说明角色卡 `personality` 描述与实际台词长期不符。
+
+### 实时模式质量硬门与内容安全
+
+| 症状 | 原因 | 解决方案 |
+|------|------|----------|
+| 日志 `[realtime] 场景N 质量未通过: ...` | L1 硬门命中：幻觉说话人 / 对话少于 8 条 / 旁白缺失 | 预生成路径会自动带失败原因重试一次（多一次 LLM 调用）；流式路径只记录 `scene["quality"]`，因为已推送的对话无法撤回 |
+| 反馈反复注入同一批问题 | `_quality_feedback` 未在通过时清空 | 核对 `_apply_quality_gate` 的 else 分支；反馈仅影响下一场景 Prompt |
+| 前端收到 HTTP 400「您输入的描述包含不支持的内容（…）」 | `content_guard.scan_input` 在路由层拦截涉黄/自残/毒品/武器/现实暴力描述 | 属预期行为；调整用户描述即可。分类词表在 `content_guard.BLOCK_RULES`，采用共现命中以避免误伤「命案/凶手/遗书」等叙事常用词 |
+| 生图返回占位图且日志「提示词被内容审核拦截」 | 服务商内容审核 400（如智谱 1301） | `moderation_error_or_none` 已把它转成 `ContentSafetyError` 并跳过无意义重试；如需放行该类画面，改 `content_guard.SOFTEN_RULES` |
 
 ---
 

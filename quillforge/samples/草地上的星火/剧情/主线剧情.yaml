@@ -1,0 +1,20 @@
+main_plot:
+  summary: 草地深处，通讯员石根生必须在断粮前把命令送到前卫营。炊事班长老葛和卫生员英子一路相助，三人要穿过沼泽、暴雨和饥饿，完成这场与时间的赛跑。
+  themes:
+  - 信念与坚持
+  - 战友情谊
+  - 绝境中的选择
+  core_conflict: 在断粮、迷路、沼泽吞噬生命的绝境中，是保命掉头还是继续向前，把命令送到战友手中。
+  stages:
+  - name: 草地黄昏
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 泥沼夜行
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  beats: []
+  hooks: []

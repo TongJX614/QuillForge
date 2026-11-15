@@ -1,0 +1,17 @@
+events:
+- id: event_01
+  name: 聚义厅夜议
+  type: plot
+  description: 你一声令下，守城将领们冒着夜雨陆续赶到聚义厅。厅内油灯昏黄，墙上的襄阳城防图被穿堂风吹得微微翻卷。王
+  trigger_conditions: {}
+  location: 襄阳城守备府聚义厅
+  time: 深夜
+  characters_involved:
+  - char_01
+  - char_02
+  - char_03
+  content: 你一声令下，守城将领们冒着夜雨陆续赶到聚义厅。厅内油灯昏黄，墙上的襄阳城防图被穿堂风吹得微微翻卷。王坚、吕文焕等将佐甲胄未卸，脸上还带着城头的泥水，围站一圈。黄蓉已铺开一幅手绘的敌军布防草图，墨迹未干
+  choices:
+  - text: 让黄蓉说出那个两全的法子
+  - text: 先压下争论，问清杨过究竟为何肯拿命去赌
+  rewards: ''

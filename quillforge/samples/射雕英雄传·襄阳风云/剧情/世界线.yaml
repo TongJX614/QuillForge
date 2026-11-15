@@ -1,0 +1,18 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 蒙古大军围困襄阳，郭靖黄蓉死守孤城。金轮法王携武林高手助阵，杨过意外卷入。忠义与私仇、守城与破城，一场决定天下命运的决战在烽火中展开。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 夜雨孤城
+  - scene_id: scene_02
+    sequence: 2
+    description: 聚义厅夜议
+  - scene_id: scene_03
+    sequence: 3
+    description: 灯下问心
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

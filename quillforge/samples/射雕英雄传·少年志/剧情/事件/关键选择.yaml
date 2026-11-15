@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 张家口酒楼初相逢
+  description: ''
+  options:
+  - id: choice_1
+    text: 老老实实把跑堂叫来，让黄蓉尽管点菜，自己在一旁认真听着菜名
+    leads_to_ending: null
+  - id: choice_2
+    text: 先问清楚对方来历，再决定要不要请这顿饭
+    leads_to_ending: null
+  - id: choice_3
+    text: 把馒头推过去，说钱不多，只能请得起这些，请对方将就
+    leads_to_ending: null

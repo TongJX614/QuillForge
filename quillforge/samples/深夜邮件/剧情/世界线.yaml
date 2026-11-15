@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 林落深夜收到匿名邮件，得知导师十年前的造假案另有隐情。她联合记者姜小满，找到隐姓埋名的数据员陈默，逐步逼近副校长周维安的真相。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 匿名邮件
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

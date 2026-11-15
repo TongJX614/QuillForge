@@ -1,0 +1,25 @@
+main_plot:
+  summary: 18岁少女在天台杂物堆里发现母亲三年前的遗书，与目击者少年和沉默父亲一起，拼出母亲隐瞒重病与债务、选择独自赴死的真相。
+  themes:
+  - 真相与谎言
+  - 家庭沟通的断裂
+  - 学会告别
+  core_conflict: 女儿执意追查真相，父亲拼命掩盖，而真相本身既是伤害也是理解。
+  stages:
+  - name: 花盆下的信
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 信纸上的空白
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 米缸底下的存折
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

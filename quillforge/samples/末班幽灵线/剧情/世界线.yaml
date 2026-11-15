@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 凌晨末班车上乘客逐一无声消失，只剩主角与沉默司机，车正驶向地图上不存在的终点站。主角必须找出消失的规律，并在到站前下车。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 末班幽灵线·始发
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

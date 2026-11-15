@@ -1,0 +1,16 @@
+scenes:
+- id: scene_01
+  name: 末班车的遗落物
+  location: 深夜地铁末班车车厢
+  time: 深夜十一点半
+  atmosphere: 惨白灯光下的密闭车厢，隧道风声与广播残响交织，空气里有一种被发现般的窒息感。
+  description: 末班车驶入隧道深处，车厢里只剩你一个人。惨白的日光灯管嗡嗡作响，把每一排空座椅照得发青。你蹲下身，伸手去够滚到座位底下的螺丝刀，指尖却先碰到一样冰凉的东西——一部陌生的手机，屏幕在没有触碰的情况下自己亮了起来。推送通知栏里赫然写着明天的日期，标题只有一行字，却让隧道里的风都仿佛停了半拍。你盯着那行字，后颈的汗毛一根根立起来，工装口袋里的螺丝刀硌着膝盖，而头顶的广播还在机械地重复着终点站的名字。
+  trigger_conditions:
+    type: game_start
+  characters_present:
+  - char_01
+  interactions: []
+  assets_needed: []
+  branching_point: false
+  critical_choice: ''
+  narrative_notes: 深夜地铁末班车厢内部，惨白日光灯管照亮一排排空置的蓝色座椅，车窗映出漆黑隧道壁飞速掠过的灯带，车厢连接处微微晃动，地面泛着冷光，一个人也没有。

@@ -14,14 +14,20 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Generator
 
 import httpx
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, InternalServerError, OpenAI, RateLimitError
+
+from content_guard import moderation_error_or_none
 
 import logging
 logger = logging.getLogger(__name__)
+
+# 瞬时错误（网络抖动/限流/服务过载）自动重试，避免上层直接触发昂贵的整段重试
+_TRANSIENT_ERRORS = (APITimeoutError, APIConnectionError, InternalServerError, RateLimitError)
 
 # 项目路径
 PROJECT_ROOT = Path(__file__).resolve().parent.parent  # quillforge/
@@ -98,6 +104,30 @@ class LLMClient:
             timeout=httpx.Timeout(timeout, connect=connect_timeout),
         )
 
+    def _create_with_retry(self, kwargs: dict, attempts: int = 2):
+        """发起 chat.completions 请求，瞬时错误（超时/连接/限流/5xx）退避重试。
+
+        内容审核拒绝不是瞬时错误：重试无意义且会掩盖原因，直接抛 ContentSafetyError。
+        """
+        last_err: Exception | None = None
+        for i in range(attempts):
+            try:
+                return self.client.chat.completions.create(**kwargs)
+            except _TRANSIENT_ERRORS as e:
+                last_err = e
+                if i == attempts - 1:
+                    raise
+                wait = 1.0 * (i + 1)
+                logger.warning("[llm_client] 瞬时错误 %s，%.0fs 后重试 (%d/%d): %s",
+                               type(e).__name__, wait, i + 1, attempts - 1, e)
+                time.sleep(wait)
+            except Exception as e:
+                safety = moderation_error_or_none(e)
+                if safety is not None:
+                    raise safety from e
+                raise
+        raise last_err  # pragma: no cover
+
     def generate(self, system_prompt: str, user_prompt: str, model: str = "",
                  max_tokens: int | None = None, temperature: float | None = None) -> str:
         """调用 LLM 生成文本"""
@@ -113,7 +143,7 @@ class LLMClient:
         if self.extra_body:
             kwargs["extra_body"] = {**self.extra_body}
 
-        response = self.client.chat.completions.create(**kwargs)
+        response = self._create_with_retry(kwargs)
         return response.choices[0].message.content or ""
 
     def generate_stream(self, system_prompt: str, user_prompt: str, model: str = "",
@@ -132,7 +162,7 @@ class LLMClient:
         if self.extra_body:
             kwargs["extra_body"] = {**self.extra_body}
 
-        stream = self.client.chat.completions.create(**kwargs)
+        stream = self._create_with_retry(kwargs)
         for chunk in stream:
             if not chunk.choices:
                 continue
@@ -164,7 +194,12 @@ class LLMClient:
                     return result
                 # 类型不匹配但可接受（dict/list 互转）
                 if expect_type in (dict, list) and isinstance(result, (dict, list)):
+                    logger.warning("[llm_client] JSON 类型与期望不符: got %s, expect %s（已容忍）",
+                                   type(result).__name__, expect_type.__name__)
                     return result
+                logger.warning("[llm_client] JSON 类型不匹配且不可转换: got %s, expect %s",
+                               type(result).__name__, expect_type.__name__)
+                last_err = f"类型不匹配: {type(result).__name__}"
             except json.JSONDecodeError as e:
                 logger.debug("[llm_client] JSON 整体解析失败，尝试括号截取: %s", e)
                 # 尝试找第一个 [ 或 { 到最后一个 ] 或 }

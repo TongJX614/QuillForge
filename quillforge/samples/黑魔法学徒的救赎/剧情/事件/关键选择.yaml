@@ -1,0 +1,43 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 低语之书
+  description: ''
+  options:
+  - id: choice_1
+    text: 追问教授那本书的来历，哪怕她明显不想多谈。
+    leads_to_ending: null
+  - id: choice_2
+    text: 表面顺从地离开，暗中记住她合书时手指发白的细节。
+    leads_to_ending: null
+  - id: choice_3
+    text: 提出一个交换条件：用自己知道的事，换她透露一点关于黑魔法课程的内幕。
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 壁炉余烬
+  description: ''
+  options:
+  - id: choice_1
+    text: 追问那个死去的学生的名字和当年的事
+    leads_to_ending: null
+  - id: choice_2
+    text: 坦白自己“不属于这个世界”的秘密
+    leads_to_ending: null
+  - id: choice_3
+    text: 转而问：城堡里还有谁在找这本书？
+    leads_to_ending: null
+- id: choice_03
+  scene_id: scene_03
+  prompt: 不属于这个世界的人
+  description: ''
+  options:
+  - id: choice_1
+    text: 请她打开木匣，就看一眼那些残页
+    leads_to_ending: null
+  - id: choice_2
+    text: 先问她当年那个学生究竟是怎么死的
+    leads_to_ending: null
+  - id: choice_3
+    text: 提出去问问城堡里那个记得黑魔法的幽灵
+    leads_to_ending: null

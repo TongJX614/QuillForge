@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 加班惊变
+  description: ''
+  options:
+  - id: choice_1
+    text: 乖乖被她抱走，先观察情况再说
+    leads_to_ending: null
+  - id: choice_2
+    text: 激烈挣扎，想办法留在自己屋里
+    leads_to_ending: null
+  - id: choice_3
+    text: 用爪子指向自己的手机屏幕，试图证明身份
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 土豆的第一夜
+  description: ''
+  options:
+  - id: choice_1
+    text: 向老黄坦白自己原本是人类，求他帮忙
+    leads_to_ending: null
+  - id: choice_2
+    text: 装傻充愣，先套出老黄和这附近的底细
+    leads_to_ending: null
+  - id: choice_3
+    text: 不理老黄，趁门缝溜出去找回家的路
+    leads_to_ending: null

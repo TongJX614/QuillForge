@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 空座位
+  description: ''
+  options:
+  - id: choice_1
+    text: 靠边停车，仔细检查那张公交卡和空座位
+    leads_to_ending: null
+  - id: choice_2
+    text: 让苏晚把画本上的记录念出来，三人一起核对时间线
+    leads_to_ending: null
+  - id: choice_3
+    text: 继续开车，先稳住剩下三名乘客的情绪，别让车厢乱起来
+    leads_to_ending: null

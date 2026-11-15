@@ -1,0 +1,25 @@
+main_plot:
+  summary: 白虎岭上白骨精三度化形骗唐僧，悟空三次挥棒除妖却被师父视为滥杀。信任崩塌之际，唐僧写下贬书赶走大徒弟，却不知下一难已无猴王可挡。
+  themes:
+  - 信任与误解
+  - 慈悲的边界
+  - 忠诚的代价
+  core_conflict: 孙悟空看见的真相与唐僧相信的慈悲之间，隔着永远无法证明的距离。
+  stages:
+  - name: 白虎岭·画圈之疑
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  - name: 白虎岭·篮外之变
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_02
+  - name: 白虎岭·白布之下
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_03
+  beats: []
+  hooks: []

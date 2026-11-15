@@ -1,0 +1,29 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 一觉醒来四条腿
+  description: ''
+  options:
+  - id: choice_1
+    text: 拼命用蹄子扒栏杆，朝春桃发出最像人声的哼叫
+    leads_to_ending: null
+  - id: choice_2
+    text: 先安静下来，听花妞把圈里的规矩讲清楚
+    leads_to_ending: null
+  - id: choice_3
+    text: 赌气绝食，把食槽拱翻以示抗议
+    leads_to_ending: null
+- id: choice_02
+  scene_id: scene_02
+  prompt: 一声哼叫惊了娘
+  description: ''
+  options:
+  - id: choice_1
+    text: 趁春桃凑近，把蹄子从栏杆缝里伸出去，够她的围裙兜
+    leads_to_ending: null
+  - id: choice_2
+    text: 安静下来，先向花妞打听兽医老李是个什么样的人
+    leads_to_ending: null
+  - id: choice_3
+    text: 拼命用鼻子在泥地上划拉，试着划出个能让人看懂的记号
+    leads_to_ending: null

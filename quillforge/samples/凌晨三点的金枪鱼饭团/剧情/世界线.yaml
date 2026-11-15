@@ -1,0 +1,15 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 失眠的夜班店员林默发现女孩苏晚每天凌晨三点零七分准时来买同一款饭团，他开始记录她的规律，逐渐揭开她等待的真相，也直面自己的失眠根源。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 雨夜便利店
+  - scene_id: scene_02
+    sequence: 2
+    description: 三点零七分的准时
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

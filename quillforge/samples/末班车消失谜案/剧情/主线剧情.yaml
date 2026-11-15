@@ -1,0 +1,15 @@
+main_plot:
+  summary: 末班公交车上乘客接连消失，林悦联合司机老陈和高中生小雅，发现是五年前事故司机的怨灵作祟。三人必须在到终点站前化解怨灵执念，拯救全车人。
+  themes:
+  - 救赎
+  - 勇气
+  - 真相
+  core_conflict: 林悦等人必须在公交车到达终点站前揭开五年前事故真相并阻止怨灵继续带走乘客。
+  stages:
+  - name: 末班车启程
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

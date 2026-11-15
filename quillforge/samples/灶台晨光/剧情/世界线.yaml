@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 林晓回老屋处理外婆遗物，发现灶台每天清晨自动煮粥，在灶神阿灶的引导下，她逐渐解开外婆留下的心意，最终决定老屋的去留。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 灶火自燃
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

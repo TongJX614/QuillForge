@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from content_guard import ContentSafetyError, scan_input
 from generic_adapter import GenericScriptAdapter
 from script_generator import generate_script
 from dependencies import uploaded_scripts
@@ -29,17 +30,26 @@ async def api_generate_script(body: GenerateScriptRequest):
         raise HTTPException(400, "请输入剧本描述")
     if len(user_prompt) > 150:
         raise HTTPException(400, f"描述不能超过150字（当前{len(user_prompt)}字）")
+    verdict = scan_input(user_prompt, source="script_gen_route")
+    if verdict.blocked:
+        raise HTTPException(400, verdict.message)
 
     def event_stream():
         final_script_id = None
         final_path = None
-        for event in generate_script(user_prompt):
-            evt_type = event.get("type", "progress")
-            payload = json.dumps(event, ensure_ascii=False)
-            yield f"event: {evt_type}\ndata: {payload}\n\n"
-            if evt_type == "done":
-                final_script_id = event.get("script_id")
-                final_path = event.get("path")
+        try:
+            for event in generate_script(user_prompt):
+                evt_type = event.get("type", "progress")
+                payload = json.dumps(event, ensure_ascii=False)
+                yield f"event: {evt_type}\ndata: {payload}\n\n"
+                if evt_type == "done":
+                    final_script_id = event.get("script_id")
+                    final_path = event.get("path")
+        except ContentSafetyError as e:
+            logger.info("[script_gen] 模型内容审核拦截: %s", e.message)
+            payload = json.dumps({"type": "error", "message": e.message}, ensure_ascii=False)
+            yield f"event: error\ndata: {payload}\n\n"
+            return
 
         if final_script_id and final_path:
             try:

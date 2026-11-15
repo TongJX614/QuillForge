@@ -26,6 +26,9 @@ if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
 from llm_client import LLMClient  # noqa: E402
+from logger import get_logger  # noqa: E402
+
+logger = get_logger("harness.sut")
 
 # 项目路径
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # quillforge/
@@ -145,12 +148,18 @@ class NarrativeSUT:
     def __init__(self, config: dict | None = None):
         self.config = config or load_config()
         llm_cfg = self.config.get("quillforge", {}).get("llm", {})
+        # timeout：配置值 ≥1000 视为毫秒，否则视为秒（兼容历史配置）
+        try:
+            _t = float(llm_cfg.get("timeout", 90000))
+        except (TypeError, ValueError):
+            _t = 90.0
+        timeout_s = _t / 1000.0 if _t >= 1000 else _t
         # 使用统一 LLM 客户端，从配置文件读取参数
         self.llm = LLMClient(
             model=llm_cfg.get("model", "deepseek-chat"),
             temperature=llm_cfg.get("temperature", 0.8),
             max_tokens=llm_cfg.get("maxTokens", 3000),
-            timeout=90.0,
+            timeout=timeout_s,
             connect_timeout=10.0,
             api_key=llm_cfg.get("apiKey") or None,
             api_base=llm_cfg.get("apiBase") or None,
@@ -163,7 +172,12 @@ class NarrativeSUT:
             "narration": load_prompt("narration_v2.md"),
             "dialogue": load_prompt("dialogue_v2.md"),
             "choices": load_prompt("choices_v2.md"),
+            "personality_judge": load_prompt("personality_judge.md"),
         }
+        gate_cfg = (self.config.get("quillforge", {})
+                    .get("stages", {})
+                    .get("validationGate", {}))
+        self.judge_max_tokens = int(gate_cfg.get("judgeMaxTokens", 300))
 
     def render_template(self, template: str, variables: dict) -> str:
         """渲染 Prompt 模板"""
@@ -225,3 +239,35 @@ class NarrativeSUT:
     def call_json_stream(self, system: str, user: str, model: str = ""):
         """调用 LLM 流式生成并增量解析 JSON 数组"""
         yield from self.llm.generate_json_stream(system, user, model)
+
+    # ── Stage 5 性格评审兜底 ──
+
+    def judge_personality(self, char, lines: list[str]) -> float | None:
+        """用 LLM 评审某角色的一批台词是否符合其性格/说话风格，返回 0-1 分。
+
+        仅在性格关键词词表零命中时被调用；任何异常或解析失败都返回 None，
+        由验证器退回「不阻塞」，绝不因为评审本身出错而拖垮生成。
+        """
+        template = self.prompts.get("personality_judge") or ""
+        if not template or not lines:
+            return None
+        user_prompt = render_template(template, {
+            "charName": getattr(char, "name", ""),
+            "personality": getattr(char, "personality", ""),
+            "voiceTone": getattr(char, "speaking_style", ""),
+            "background": getattr(char, "background", ""),
+            "lines": [str(t)[:120] for t in lines[:12]],
+        })
+        try:
+            raw = self.llm.generate(
+                "你是严格的剧本角色一致性评审，只输出 JSON，不要任何额外说明。",
+                user_prompt, max_tokens=self.judge_max_tokens, temperature=0.0,
+            )
+        except Exception as e:
+            logger.warning("[sut] 性格评审调用失败 (%s): %s", getattr(char, "name", "?"), e)
+            return None
+        match = re.search(r'"score"\s*:\s*([0-9]*\.?[0-9]+)', raw or "")
+        if not match:
+            logger.warning("[sut] 性格评审输出无法解析: %s", (raw or "")[:120])
+            return None
+        return max(0.0, min(1.0, float(match.group(1))))

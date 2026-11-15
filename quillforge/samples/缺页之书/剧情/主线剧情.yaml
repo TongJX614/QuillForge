@@ -1,0 +1,15 @@
+main_plot:
+  summary: 雨夜，图书馆管理员林知夏遇到一本会说话的古书，它丢失了三页章节，请求她帮忙找回。
+  themes:
+  - 残缺与完整
+  - 记忆与遗忘
+  - 倾听沉默之物
+  core_conflict: 书灵渴望完整，但找回的章节可能揭示它不愿面对的过去。
+  stages:
+  - name: 雨夜初语
+    goal: ''
+    conflict: ''
+    scenes:
+    - scene_01
+  beats: []
+  hooks: []

@@ -1,0 +1,17 @@
+scenes:
+- id: scene_01
+  name: 雨夜叩门
+  location: 荒郊驿站正堂
+  time: 深夜
+  atmosphere: 暴雨封闭了整个世界，油灯昏黄的光圈里，一冷一暖两个沉默的人，和一把滴着水的刀，构成微妙的平衡。
+  description: 暴雨砸在瓦檐上，像千万颗石子一齐倾落。驿站正堂里只点着一盏油灯，火苗被门缝灌进来的风撩得东倒西歪，把梁柱的影子晃成一片。你刚把炉膛封好，铁皮炉身还散着余温，正堂里便只剩雨声和柴炭偶尔的噼啪。三十里荒郊，这种天气不会有人来——可偏偏就在这时，门板被叩响了，三下，又急又重，间隔短得像是用刀柄砸的。你披上蓑衣走到门后，手按在门闩上停了停。门缝里透进湿冷的风，还有一股若有若无的铁腥气。
+  trigger_conditions:
+    type: game_start
+  characters_present:
+  - char_01
+  - char_02
+  interactions: []
+  assets_needed: []
+  branching_point: false
+  critical_choice: ''
+  narrative_notes: 暴雨深夜的荒郊驿站正堂，油灯昏黄摇曳，铁皮炉膛透出暗红余温，粗木梁柱投下摇晃的长影，门板被雨水打湿，门槛外雨帘如注，地面水渍反着微光，窗外漆黑一片

@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 雨夜叩门
+  description: ''
+  options:
+  - id: choice_1
+    text: 先递一条干布给她，再慢慢问来路。
+    leads_to_ending: null
+  - id: choice_2
+    text: 装作没看见她袖口的裂口，先添柴烧水。
+    leads_to_ending: null
+  - id: choice_3
+    text: 直截了当：你袖子上的口子，怎么弄的。
+    leads_to_ending: null

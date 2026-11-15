@@ -1,0 +1,15 @@
+choices:
+- id: choice_01
+  scene_id: scene_01
+  prompt: 血鼓催命
+  description: ''
+  options:
+  - id: choice_1
+    text: 先问公孙雪，她手上有什么可用的人和地形
+    leads_to_ending: null
+  - id: choice_2
+    text: 拉着王大柱先找地方躲起来，观察局势再说
+    leads_to_ending: null
+  - id: choice_3
+    text: 直接说出自己关于‘拖住吕布’的初步想法
+    leads_to_ending: null

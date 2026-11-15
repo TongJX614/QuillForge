@@ -1,0 +1,12 @@
+world_lines:
+- id: main_line
+  name: 主线
+  description: 过雪山时，炊事班长赵铁柱发现粮袋里多出三块银元。追查之下，竟是马夫老周偷偷卖掉驮骡换来的。小满急需药品，骡子又是全连的运输命脉，三块银元在三人间掀起一场沉默的风暴。
+  path:
+  - scene_id: scene_01
+    sequence: 1
+    description: 雪线下的银元
+  key_choices: []
+  end_ending: ending_None
+convergence_points: []
+rules: []

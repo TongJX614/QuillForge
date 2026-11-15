@@ -20,13 +20,15 @@ from .base import StageBase
 class ValidationStage(StageBase):
     """Stage 5: 验证门控"""
 
-    def __init__(self, validator=None):
+    def __init__(self, validator=None, thresholds: dict | None = None):
         """
         Args:
             validator: 验证器实例（实现 validate_all 方法）。
                        如果为 None，则使用默认的 NarrativeValidator。
+            thresholds: 验证阈值（透传给 NarrativeValidator），来自配置文件。
         """
         self._validator = validator
+        self._thresholds = thresholds
 
     @property
     def name(self) -> str:
@@ -51,10 +53,10 @@ class ValidationStage(StageBase):
         dialogues = dialogues or []
         choices = choices or []
 
-        validator = self._get_validator(input_data, ctx.assembled)
+        validator = self._get_validator(input_data, ctx.assembled, sut=sut)
         return validator.validate_all(narration, dialogues, choices, retry_count=retry_count)
 
-    def _get_validator(self, input_data: HarnessInput, assembled=None):
+    def _get_validator(self, input_data: HarnessInput, assembled=None, sut=None):
         """获取验证器实例（延迟创建，因为需要 input_data 的对话数量约束）"""
         if self._validator is not None:
             return self._validator
@@ -65,4 +67,6 @@ class ValidationStage(StageBase):
             context=assembled,
             min_dialogues=input_data.options.dialogue_count_min,
             max_dialogues=input_data.options.dialogue_count_max,
+            thresholds=self._thresholds,
+            judge=sut.judge_personality if sut is not None else None,
         )

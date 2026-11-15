@@ -4,6 +4,12 @@
 请根据以下场景和角色信息，生成至少 {{minDialogues}} 轮角色对话（建议 {{dialogueCount}} 轮左右，场景复杂时可适当增多）。
 并在对话之间**适度穿插**角色的动作/神态/心理描写（以旁白形式呈现，增强演出感）。
 
+{{#if retryFeedback}}
+## ⚠⚠ 上一次生成未通过质量验证（最高优先级修正项）
+{{retryFeedback}}
+本次输出必须**针对性修正**以上问题，其余要求不变。
+{{/if}}
+
 {{#if worldbookRules}}
 ## ⚠ 世界书约束（最高优先级，必须遵守）
 {{worldbookRules}}
@@ -204,17 +210,30 @@
 5. 每条旁白简洁，1 句为宜
 
 ## 输出格式
-输出 JSON 数组，**对话对象与动作旁白对象交替排列**，严格遵循以下格式：
+输出 JSON 数组，**对话对象与动作旁白对象交替排列**，数组的**最后一个元素必须是选项对象**：
 ```json
 [
   {"speaker": "角色姓名", "emotion": "情绪标签", "text": "对话内容"},
   {"type": "action", "subject": "角色姓名", "text": "该角色的动作/神态/心理描写"},
-  {"speaker": "角色姓名", "emotion": "情绪标签", "text": "对话内容"}
+  {"speaker": "角色姓名", "emotion": "情绪标签", "text": "对话内容"},
+  {"type": "choices", "choices": [
+    {"text": "选项描述", "effect": "后果描述", "worldlineImpact": "advance"}
+  ]}
 ]
 ```
 
 - 对话对象：speaker / emotion / text 三个字段（text 必须放最后）。
 - 动作旁白对象：type 固定为 "action"，subject 为角色姓名，text 为描写内容（无 speaker/emotion 字段）。
+- 选项对象：**必须是数组最后一个元素**，type 固定为 "choices"，choices 数组内含 2-4 个选项。
+
+## 玩家选项设计规则（选项对象内）
+1. 每个选项包含：text（选项描述 5-20字）、effect（后果描述 5-15字）、worldlineImpact（世界线影响标记）
+2. 选项间必须有实质差异，禁止"换皮"选项；每个选项都有代价——不存在完美选择
+3. 至少一个选项直接推进主线到下一节点（worldlineImpact: advance）
+4. 至少一个选项有风险但有更大回报（worldlineImpact: advance_risky）
+5. worldlineImpact 只能是：advance / advance_risky / stay_current / side_branch
+6. 选项必须基于当前场景旁白与对话中确立的情境设计，不得凭空创造剧本之外的情节
+7. 选项应承接对话结尾留下的决策点，让玩家能快速理解后果
 
 emotion 只能是以下中文值之一：平静、急切、分析、果断、担忧、愤怒、希望、好奇、沉着、讽刺、恐惧、坚定
 
