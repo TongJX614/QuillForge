@@ -1,8 +1,20 @@
 # QuillForge
 
-基于 **Harness 架构**的 AI 互动叙事生成引擎，根据剧本数据（世界线大纲、角色卡、事件/结局等）自动生成符合主线的场景旁白、角色对话和玩家选择。支持**选择驱动叙事**：玩家选择影响后续剧情走向、解锁隐藏选项、触发不同结局。同时支持 **AI 实时生成模式**（一句话描述 → 实时生成可玩故事）、**AI 剧本生成**（一句话 → 完整剧本包）、**立绘/背景生图**与 **TTS 语音合成**。
+**把剧本或一句话描述，变成可玩的互动叙事。**
+
+输入一个剧本文件夹（世界线大纲、角色卡、事件/结局等），QuillForge 会生成符合主线的场景旁白、角色对话和玩家选择；玩家的选择会进入后续剧情、解锁隐藏选项并导向不同结局。也可以从一句话直接生成可玩故事或完整剧本包，并调用生图与 TTS 产出立绘、背景和语音。
+
+底层采用 **Harness 架构**：SUT 隔离、5 个可插拔 Stage、Observer 事件、Fixture 系统与三层保底；生成、验证和失败重试都在同一条流水线上完成。
 
 > **版本**: 6.0.0 | **最后更新**: 2026-08-06 | **对话轮数**: 3-15 | **API 端点**: 26 个
+
+## 界面预览
+
+| 创作端：一句话 / 一个剧本文件夹 | 运行端：生成的场景可直接游玩 |
+| --- | --- |
+| ![QuillForge 创作端首页](docs/assets/screenshots/engine-home.jpg) | ![QuillForge 生成的互动叙事场景](docs/assets/screenshots/generated-scene.jpg) |
+
+右侧画面来自用 QuillForge 构建的《格物造境 · 回响》：立绘、背景、旁白与选择都由引擎生成。可玩版本见 [gewuzaojing-echo](https://github.com/TongJX614/gewuzaojing-echo)，工程示例见 [QuillForge-Echo](https://github.com/TongJX614/QuillForge-Echo)。
 
 ## 快速开始
 
